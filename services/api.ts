@@ -3,74 +3,107 @@
 import axios, { type AxiosResponse } from "axios";
 import { customHistory } from "../history";
 
-// Define endpoint constants
+/* ------------------------------------------------------------
+   ENDPOINT CONSTANTS
+------------------------------------------------------------ */
 export const Endpoint = {
   FETCH_DATA_ANALYSIS: "/spatio-temporal/raw",
 
-  
+  // FULL URL ENDPOINTS
+  KEYCLOAK_USERS: "https://caas.kaatru.org/keycloak/users",
+  GROUP_ALL: "https://bw04.kaatru.org/group/all",
+  GROUP_DEVICES: "https://bw04.kaatru.org/group",
+  ACCESS_MANAGEMENT: "https://caas.kaatru.org/admin/access-management",
+
 } as const;
 
-// ------------------------------------------------------------
-// Base abstract class
-// ------------------------------------------------------------
-
+/* ------------------------------------------------------------
+   Base Abstract Class
+------------------------------------------------------------ */
 abstract class ApiService {
   abstract isLoggedIn(): Promise<boolean>;
   abstract login(user: string, pwd: string): Promise<AxiosResponse | any>;
-  abstract get(
-    endpoint: string,
-    payload?: Record<string, any>
-  ): Promise<AxiosResponse | any>;
-  abstract post(
-    endpoint: string,
-    payload: any,
-    params?: Record<string, any>
-  ): Promise<AxiosResponse | any>;
-  abstract patch(
-    endpoint: string,
-    payload: any
-  ): Promise<AxiosResponse | any>;
+  abstract setKeycloakToken(token: string): void;
 
-  abstract put(
-    endpoint: string,
-    payload: any,
-    params: any
-  ): Promise<AxiosResponse | any>;
+  abstract get(endpoint: string, payload?: Record<string, any>): Promise<any>;
+  abstract post(endpoint: string, payload: any, params?: Record<string, any>): Promise<any>;
+  abstract patch(endpoint: string, payload: any): Promise<any>;
+  abstract put(endpoint: string, payload: any, params?: Record<string, any>): Promise<any>;
+  abstract getRamanAnalysis(endpoint: string, payload?: Record<string, any>): Promise<any>;
 }
 
-// ------------------------------------------------------------
-// Production API class
-// ------------------------------------------------------------
-
+/* ------------------------------------------------------------
+   PRODUCTION IMPLEMENTATION
+------------------------------------------------------------ */
 class Production extends ApiService {
   #host: string;
-  #ramanapihost: string;
+
+  // ⭐ SPECIAL TOKEN FOR KEYCLOAK USERS API
+  #keycloakToken: string | null = null;
 
   constructor() {
     super();
     const prefix = import.meta.env.VITE_APP_API_URL_PREFIX || "";
-    this.#host =
-      prefix.length === 0 ? "http://localhost:8000/v1" : prefix;
-    this.#ramanapihost = prefix;
-    console.log("the host is", prefix.length);
+
+    this.#host = prefix.length === 0 ? "http://localhost:8000/v1" : prefix;
+
+    console.log("Backend Host:", this.#host);
   }
 
-  async isLoggedIn(): Promise<boolean> {
-    const token =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
-    return token !== null;
+  /* ------------------------------------------------------------
+     Allows App.tsx to inject the Keycloak Token
+  ------------------------------------------------------------ */
+  setKeycloakToken(token: string) {
+    this.#keycloakToken = token;
   }
 
-  async login(user: string, pwd: string): Promise<AxiosResponse | any> {
+  /* ------------------------------------------------------------
+     Resolve API URL
+  ------------------------------------------------------------ */
+  #resolveUrl(endpoint: string): string {
+    if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
+      return endpoint; // full URL
+    }
+    return `${this.#host}${endpoint}`;
+  }
+
+  /* ------------------------------------------------------------
+     Select Correct Token Based on Endpoint
+  ------------------------------------------------------------ */
+#getHeaders(endpoint?: string): Record<string, string> {
+  const backendToken =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
+
+  // Keycloak + Access Management → use Keycloak token
+if (
+  endpoint === Endpoint.KEYCLOAK_USERS ||
+  endpoint === Endpoint.ACCESS_MANAGEMENT
+) {
+  return {
+    Authorization: `Bearer ${this.#keycloakToken ?? ""}`,  // FIX HERE
+  };
+}
+
+
+  // Default
+  return {
+    Authorization: `Bearer ${backendToken ?? ""}`,
+  };
+}
+
+  /* ------------------------------------------------------------
+     LOGIN
+  ------------------------------------------------------------ */
+  async login(user: string, pwd: string): Promise<any> {
     try {
-      const res = await axios.post(`${this.#host}${Endpoint.LOGIN}`, {
+      const res = await axios.post(`${this.#host}/login`, {
         username: user,
         password: pwd,
       });
+
       localStorage.setItem("token", res.data.access_token);
       return res;
     } catch (e: any) {
-      console.error(e);
       return {
         status: e.response?.status,
         data: e.response?.data?.detail,
@@ -78,208 +111,111 @@ class Production extends ApiService {
     }
   }
 
-  async getRamanAnalysis(
-    endpoint: string,
-    payload?: Record<string, any>
-  ): Promise<AxiosResponse | any> {
-    try {
-      const res = await axios.get(`${this.#ramanapihost}${endpoint}`, {
-        params: payload ?? {},
-        headers: this.#getHeaders(),
-      });
-      return res;
-    } catch (e: any) {
-      console.error(e);
-      return e.response;
-    }
-  }
-
+  /* ------------------------------------------------------------
+     GET
+  ------------------------------------------------------------ */
   async get(endpoint: string, payload?: Record<string, any>): Promise<any> {
     try {
-      const res = await axios.get(`${this.#host}${endpoint}`, {
+      const url = this.#resolveUrl(endpoint);
+
+      return await axios.get(url, {
         params: payload ?? {},
-        headers: this.#getHeaders(),
+        headers: this.#getHeaders(endpoint),
       });
-      return res;
     } catch (e: any) {
-      console.error(e);
-      if (e.response) {
-        return { status: e.response.status, data: e.response.data.detail };
-      } else {
-        customHistory.push("/");
-        return { status: 401, data: "UnAuthorized" };
-      }
-    }
-  }
-
-  async post(
-    endpoint: string,
-    payload: any,
-    params: Record<string, any> = {}
-  ): Promise<any> {
-    try {
-      const res = await axios.post(`${this.#host}${endpoint}`, payload, {
-        params,
-        headers: this.#getHeaders(),
-      });
-      return res;
-    } catch (e: any) {
-      console.error(e);
-      if (e.response) {
-        return { status: e.response.status, data: e.response.data.detail };
-      } else {
-        customHistory.push("/");
-        return { status: 401, data: "UnAuthorized" };
-      }
-    }
-  }
-
-  async uploadFile(
-    endpoint: string,
-    formData: FormData,
-  ): Promise<any> {
-    try {
-      const res = await axios.post(`${this.#host}${endpoint}`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          ...this.#getHeaders(),
-        },
-      });
-      return res;
-    } catch (e: any) {
-      console.error(e);
+      console.error("GET ERROR:", e);
       return e.response;
     }
   }
 
-  async put(
-    endpoint: string,
-    payload: any,
-    params: Record<string, any> = {}
-  ): Promise<any> {
+  /* ------------------------------------------------------------
+     GET (RAMAN)
+  ------------------------------------------------------------ */
+  async getRamanAnalysis(endpoint: string, payload?: Record<string, any>): Promise<any> {
     try {
-      const res = await axios.put(`${this.#host}${endpoint}`, payload, {
-        params,
-        headers: this.#getHeaders(),
-      });
-      return res;
-    } catch (e: any) {
-      console.error(e);
-      if (e.response) {
-        return { status: e.response.status, data: e.response.data.detail };
-      } else {
-        customHistory.push("/");
-        return { status: 401, data: "UnAuthorized" };
-      }
-    }
-  }
+      const url = this.#resolveUrl(endpoint);
 
-  async delete(
-    endpoint: string,
-    payload?: Record<string, any>,
-  ): Promise<any> {
-    try {
-      const res = await axios.delete(`${this.#host}${endpoint}`, {
+      return await axios.get(url, {
         params: payload ?? {},
-        headers: this.#getHeaders(),
+        headers: this.#getHeaders(endpoint),
       });
-      return res;
     } catch (e: any) {
-      console.error(e);
+      console.error("RAMAN ERROR:", e);
       return e.response;
     }
   }
 
-  async uploadFiles(endpoint: string, payload: FormData): Promise<any> {
+  /* ------------------------------------------------------------
+     POST
+  ------------------------------------------------------------ */
+  async post(endpoint: string, payload: any, params: Record<string, any> = {}): Promise<any> {
     try {
-      const res = await axios.post(`${this.#host}${endpoint}`, payload, {
-        headers: {
-          ...this.#getHeaders(),
-          "Content-Type": "multipart/form-data",
-        },
+      const url = this.#resolveUrl(endpoint);
+
+      return await axios.post(url, payload, {
+        params,
+        headers: this.#getHeaders(endpoint),
       });
-      return res;
     } catch (e: any) {
-      console.error(e);
       return e.response;
     }
   }
 
+  /* ------------------------------------------------------------
+     PUT
+  ------------------------------------------------------------ */
+  async put(endpoint: string, payload: any, params: Record<string, any> = {}): Promise<any> {
+    try {
+      const url = this.#resolveUrl(endpoint);
+
+      return await axios.put(url, payload, {
+        params,
+        headers: this.#getHeaders(endpoint),
+      });
+    } catch (e: any) {
+      return e.response;
+    }
+  }
+
+  /* ------------------------------------------------------------
+     PATCH
+  ------------------------------------------------------------ */
   async patch(endpoint: string, payload: any): Promise<any> {
     try {
-      const res = await axios.patch(`${this.#host}${endpoint}`, payload, {
-        headers: this.#getHeaders(),
+      const url = this.#resolveUrl(endpoint);
+
+      return await axios.patch(url, payload, {
+        headers: this.#getHeaders(endpoint),
       });
-      return res;
     } catch (e: any) {
-      console.error(e);
-      if (e.response) {
-        return { status: e.response.status, data: e.response.data.detail };
-      } else {
-        customHistory.push("/");
-        return { status: 401, data: "UnAuthorized" };
-      }
+      return e.response;
     }
   }
 
-  async put(endpoint: string, payload: any, params = {}) {
-    try {
-      const res = await axios.put(
-        `${this.#host}${endpoint}`,
-        payload, // request body
-        {
-          params, // query parameters
-          headers: this.#getHeaders(),
-        }
-      );
-      return res;
-    } catch (e) {
-      console.log(e);
-      // Network-level errors (no response from server)
-      if (e.response) {
-        return { status: e.response.status, data: e.response.data.detail };
-      } else {
-        customHistory.push("/");
-        return { status: 401, data: "UnAuthorized" };
-      }
-    }
-  }
-
-  #getHeaders(): Record<string, string> {
-    const token =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
-    return { Authorization: `Bearer ${token ?? ""}` };
-  }
-}
-
-// ------------------------------------------------------------
-// Mock Class Placeholder (Optional)
-// ------------------------------------------------------------
-class Mock extends ApiService {
   async isLoggedIn(): Promise<boolean> {
-    return true;
-  }
-
-  async login(): Promise<any> {
-    return { data: { access_token: "mock_token" } };
-  }
-
-  async get(): Promise<any> {
-    return { data: [] };
-  }
-
-  async post(): Promise<any> {
-    return { data: {} };
-  }
-
-  async patch(): Promise<any> {
-    return { data: {} };
+    return !!(
+      localStorage.getItem("token") || sessionStorage.getItem("token")
+    );
   }
 }
 
-// ------------------------------------------------------------
-// Export API Service Instance
-// ------------------------------------------------------------
+/* ------------------------------------------------------------
+   MOCK API
+------------------------------------------------------------ */
+class Mock extends ApiService {
+  setKeycloakToken(): void {}
+  async isLoggedIn(): Promise<boolean> { return true; }
+  async login(): Promise<any> { return { data: { access_token: "mock" } }; }
+  async get(): Promise<any> { return { data: [] }; }
+  async post(): Promise<any> { return { data: {} }; }
+  async patch(): Promise<any> { return { data: {} }; }
+  async put(): Promise<any> { return { data: {} }; }
+  async getRamanAnalysis(): Promise<any> { return { data: [] }; }
+}
+
+/* ------------------------------------------------------------
+   EXPORT INSTANCE
+------------------------------------------------------------ */
 export const apiService: ApiService =
   import.meta.env.VITE_APP_STATE === "PRODUCTION"
     ? new Production()
