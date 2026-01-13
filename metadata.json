@@ -1,0 +1,5 @@
+{
+  "name": "Spatio-Temporal Data Analysis Dashboard",
+  "description": "An interactive dashboard to visualize and analyze spatio-temporal data from multiple devices, featuring a time-series chart and a heatmap-style geographical map.",
+  "requestFramePermissions": []
+}
