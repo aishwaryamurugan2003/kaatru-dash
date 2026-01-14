@@ -13,8 +13,11 @@ export const Endpoint = {
   KEYCLOAK_USERS: "https://caas.kaatru.org/keycloak/users",
   GROUP_ALL: "https://bw04.kaatru.org/group/all",
   GROUP_DEVICES: "https://bw04.kaatru.org/group",
+
   ACCESS_MANAGEMENT: "https://caas.kaatru.org/admin/access-management",
 
+  // ⭐ NEW SYNC ENDPOINT
+  ACCESS_MANAGEMENT_SYNC: "https://caas.kaatru.org/admin/access-management/sync",
 } as const;
 
 /* ------------------------------------------------------------
@@ -70,26 +73,26 @@ class Production extends ApiService {
   /* ------------------------------------------------------------
      Select Correct Token Based on Endpoint
   ------------------------------------------------------------ */
-#getHeaders(endpoint?: string): Record<string, string> {
-  const backendToken =
-    localStorage.getItem("token") || sessionStorage.getItem("token");
+  #getHeaders(endpoint?: string): Record<string, string> {
+    const backendToken =
+      localStorage.getItem("token") || sessionStorage.getItem("token");
 
-  // Keycloak + Access Management → use Keycloak token
-if (
-  endpoint === Endpoint.KEYCLOAK_USERS ||
-  endpoint === Endpoint.ACCESS_MANAGEMENT
-) {
-  return {
-    Authorization: `Bearer ${this.#keycloakToken ?? ""}`,  // FIX HERE
-  };
-}
+    // ⭐ THESE ENDPOINTS REQUIRE KEYCLOAK TOKEN
+    if (
+      endpoint === Endpoint.KEYCLOAK_USERS ||
+      endpoint === Endpoint.ACCESS_MANAGEMENT ||
+      endpoint === Endpoint.ACCESS_MANAGEMENT_SYNC  // ⭐ ADDED
+    ) {
+      return {
+        Authorization: `Bearer ${this.#keycloakToken ?? ""}`,
+      };
+    }
 
-
-  // Default
-  return {
-    Authorization: `Bearer ${backendToken ?? ""}`,
-  };
-}
+    // Default token
+    return {
+      Authorization: `Bearer ${backendToken ?? ""}`,
+    };
+  }
 
   /* ------------------------------------------------------------
      LOGIN
