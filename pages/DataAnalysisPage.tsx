@@ -23,6 +23,9 @@ const DataAnalysisPage: React.FC = () => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [mapData, setMapData] = useState<any[]>([]);
 
+  // ⭐ TOKEN STATE
+  const [tokenAlive, setTokenAlive] = useState(true);
+
   const handleFetchClick = async () => {
     if (selectedDevices.length === 0) {
       alert("Please select at least one device.");
@@ -39,21 +42,31 @@ const DataAnalysisPage: React.FC = () => {
         end_time: endTime,
       });
 
-      if (res?.status === 200) {
+      // ⭐ TOKEN EXPIRED → NO DATA
+      if (!res) {
+        setTokenAlive(false);
+        setChartData([]);
+        setMapData([]);
+        return;
+      }
+
+      if (res.status === 200) {
+        setTokenAlive(true);
+
         const raw = res.data || [];
 
-        // CHART FORMAT FIX
+        // ---------- CHART FORMAT ----------
         const chartSeries = [
           {
             deviceId: selectedDevices[0],
             data: raw.map((item: any) => ({
               dTS: item.dTS,
               sPM2: item.sPM2,
-            }))
-          }
+            })),
+          },
         ];
 
-        // MAP FORMAT
+        // ---------- MAP FORMAT ----------
         const mapSeries = raw
           .map((item: any) => {
             const lat = Number(item.lat ?? item.latitude);
@@ -66,14 +79,11 @@ const DataAnalysisPage: React.FC = () => {
               dTS: item.dTS,
             };
           })
-          .filter(p => !isNaN(p.lat) && !isNaN(p.lng)); // prevent Leaflet crash
-
-
+          .filter((p) => !isNaN(p.lat) && !isNaN(p.lng));
 
         setChartData(chartSeries);
         setMapData(mapSeries);
-      }
-      else {
+      } else {
         alert("Failed to fetch data.");
       }
     } catch (err) {
@@ -86,9 +96,9 @@ const DataAnalysisPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* ---------------- CONTROLS ---------------- */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-
           <div className="lg:col-span-2">
             <DeviceSelector
               availableDevices={ALL_DEVICES}
@@ -98,26 +108,30 @@ const DataAnalysisPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium mb-1">
               Start Time
             </label>
             <input
               type="datetime-local"
               value={formatTimestampForInput(startTime)}
-              onChange={(e) => setStartTime(new Date(e.target.value).getTime())}
-              className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md p-2 text-sm"
+              onChange={(e) =>
+                setStartTime(new Date(e.target.value).getTime())
+              }
+              className="w-full rounded-md p-2 text-sm"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium mb-1">
               End Time
             </label>
             <input
               type="datetime-local"
               value={formatTimestampForInput(endTime)}
-              onChange={(e) => setEndTime(new Date(e.target.value).getTime())}
-              className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md p-2 text-sm"
+              onChange={(e) =>
+                setEndTime(new Date(e.target.value).getTime())
+              }
+              className="w-full rounded-md p-2 text-sm"
             />
           </div>
 
@@ -133,21 +147,31 @@ const DataAnalysisPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md min-h-[500px] flex flex-col">
-          <h2 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-300">
-            PM2.5 Time Series
-          </h2>
-          <TimeSeriesChart data={chartData} loading={loading} />
+      {/* ---------------- TOKEN EXPIRED MESSAGE ---------------- */}
+      {!tokenAlive && (
+        <div className="text-center text-gray-400 py-10">
+          No data available (session expired)
         </div>
+      )}
 
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md min-h-[500px] flex flex-col">
-          <h2 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-300">
-            Device Path on Map
-          </h2>
-          <HeatMapLeaflet data={mapData} loading={loading} />
+      {/* ---------------- CHARTS ---------------- */}
+      {tokenAlive && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md min-h-[500px]">
+            <h2 className="text-lg font-semibold mb-2">
+              PM2.5 Time Series
+            </h2>
+            <TimeSeriesChart data={chartData} loading={loading} />
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md min-h-[500px]">
+            <h2 className="text-lg font-semibold mb-2">
+              Device Path on Map
+            </h2>
+            <HeatMapLeaflet data={mapData} loading={loading} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
