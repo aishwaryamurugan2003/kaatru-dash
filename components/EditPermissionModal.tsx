@@ -17,7 +17,7 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
   useEffect(() => {
     if (user) {
       fetchGroups();
-      preloadUserGroup();
+      preloadFirstUserGroup();
     }
   }, [user]);
 
@@ -38,15 +38,17 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
   };
 
   /* ------------------------------------------------------------
-      PREFILL SELECTED GROUP + DEVICES
+      PREFILL (FIRST GROUP ONLY – EDIT MODE)
   ------------------------------------------------------------ */
-  const preloadUserGroup = () => {
+  const preloadFirstUserGroup = () => {
     if (!user?.access || user.access.length === 0) return;
 
     const g = user.access[0];
 
-    const group = { label: g.group_name, value: g.group_id };
-    setSelectedGroup(group);
+    setSelectedGroup({
+      label: g.group_name,
+      value: g.group_id,
+    });
 
     fetchDevices(g.group_id, g.devices);
   };
@@ -82,51 +84,48 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
   };
 
   /* ------------------------------------------------------------
-      FIX: FETCH EXISTING ACCESS CORRECTLY
-  ------------------------------------------------------------ */
-  const fetchExistingUserAccess = async (userId: string) => {
-    const res = await apiService.get(Endpoint.ACCESS_MANAGEMENT);
-
-    if (!Array.isArray(res?.data)) return [];
-
-    const found = res.data.find((u: any) => u.user_id === userId);
-
-    return found?.access || [];
-  };
-
-  /* ------------------------------------------------------------
-      SAVE (MERGE OLD + NEW)
+      SAVE (SAFE MERGE + SYNC)
   ------------------------------------------------------------ */
   const saveChanges = async () => {
     if (!selectedGroup) return;
 
     const userId = user.key;
 
-    // 1️⃣ Get all existing groups from full list
-    const existingAccess = await fetchExistingUserAccess(userId);
+    // 1️⃣ Fetch FULL existing access (single-user source)
+    const existingAccess = await apiService.getUserFullAccess(userId);
 
-    // 2️⃣ Build updated entry
+    // 2️⃣ Build updated group entry
     const updatedEntry = {
       group_id: selectedGroup.value,
       group_name: selectedGroup.label,
       devices: selectedDevice.map((d) => d.value),
     };
 
-    // 3️⃣ Merge
+    // 3️⃣ Merge safely (replace only same group)
     const mergedAccess = [
-      ...existingAccess.filter(a => a.group_id !== updatedEntry.group_id),
+      ...existingAccess.filter(
+        (a) => a.group_id !== updatedEntry.group_id
+      ),
       updatedEntry,
     ];
 
-    const payload = {
-      user_id: userId,
-      access: mergedAccess,
-    };
+    // 🔒 Safety guard
+    if (mergedAccess.length < existingAccess.length) {
+      alert("Unsafe update blocked (possible data loss)");
+      return;
+    }
 
-    console.log("FINAL EDIT PAYLOAD:", payload);
+    console.log(
+      "FINAL EDIT SYNC PAYLOAD:",
+      JSON.stringify(
+        { user_id: userId, access: mergedAccess },
+        null,
+        2
+      )
+    );
 
-    // 4️⃣ Save
-    await apiService.put(Endpoint.ACCESS_MANAGEMENT_SYNC, payload);
+    // 4️⃣ Sync using centralized helper
+    await apiService.syncUserAccess(userId, mergedAccess);
 
     onUpdated();
     onClose();

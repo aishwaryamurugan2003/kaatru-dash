@@ -20,26 +20,42 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
   const [deviceOptions, setDeviceOptions] = useState<Option[]>([]);
 
   const [selectedUser, setSelectedUser] = useState<Option | null>(null);
-  const [selectedGroup, setSelectedGroup] = useState<Option[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<Option | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<Option[]>([]);
 
   useEffect(() => {
     if (isOpen) {
       fetchUsers();
       fetchGroups();
+      resetState();
     }
   }, [isOpen]);
 
-  // LOAD DEVICES
+  /* ------------------------------------------------------------
+      RESET
+  ------------------------------------------------------------ */
+  const resetState = () => {
+    setSelectedUser(null);
+    setSelectedGroup(null);   // ✅ FIX
+    setSelectedDevice([]);
+    setDeviceOptions([]);
+  };
+
+  /* ------------------------------------------------------------
+      LOAD DEVICES (ONLY WHEN GROUP SELECTED)
+  ------------------------------------------------------------ */
   useEffect(() => {
-    if (selectedGroup.length === 1) {
-      fetchDevices(selectedGroup[0].value);
+    if (selectedGroup) {
+      fetchDevices(selectedGroup.value);
     } else {
       setDeviceOptions([]);
       setSelectedDevice([]);
     }
   }, [selectedGroup]);
 
+  /* ------------------------------------------------------------
+      LOAD USERS
+  ------------------------------------------------------------ */
   const fetchUsers = async () => {
     const res = await apiService.getRamanAnalysis(Endpoint.KEYCLOAK_USERS, {
       first: 0,
@@ -56,6 +72,9 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
     }
   };
 
+  /* ------------------------------------------------------------
+      LOAD GROUPS
+  ------------------------------------------------------------ */
   const fetchGroups = async () => {
     const res = await apiService.getRamanAnalysis(Endpoint.GROUP_ALL);
 
@@ -69,6 +88,9 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
     }
   };
 
+  /* ------------------------------------------------------------
+      LOAD DEVICES FOR GROUP
+  ------------------------------------------------------------ */
   const fetchDevices = async (groupId: string) => {
     const res = await apiService.getRamanAnalysis(Endpoint.GROUP_DEVICES, {
       id: groupId,
@@ -84,53 +106,40 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
     }
   };
 
-  // ⭐ Get existing user groups
-  const fetchUserExistingAccess = async (userId: string) => {
-    const res = await apiService.get(`${Endpoint.ACCESS_MANAGEMENT}/${userId}`);
-    return res?.data?.access || [];
-  };
-
-  // ⭐⭐⭐ SAVE — MERGE OLD + NEW ⭐⭐⭐
+  /* ------------------------------------------------------------
+      SAVE (SAFE MERGE + SYNC)
+  ------------------------------------------------------------ */
   const handleSave = async () => {
     if (!selectedUser) return alert("Select user");
-    if (selectedGroup.length === 0) return alert("Select groups");
+    if (!selectedGroup) return alert("Select group");
     if (selectedDevice.length === 0) return alert("Select devices");
 
     const userId = selectedUser.value;
-    const deviceIds = selectedDevice.map((d) => d.value);
 
-    // 1️⃣ Fetch existing access
-    const existingAccess = await fetchUserExistingAccess(userId);
+    const existingAccess = await apiService.getUserFullAccess(userId);
 
-    // 2️⃣ Build new access entries
-    const newAccessEntries = selectedGroup.map((group) => ({
-      group_id: group.value,
-      group_name: group.label,
-      devices: deviceIds,
-    }));
-
-    // 3️⃣ Merge & remove duplicates
-    const mergedAccess = [
-      ...existingAccess.filter(
-        (old) => !newAccessEntries.some((n) => n.group_id === old.group_id)
-      ),
-      ...newAccessEntries,
-    ];
-
-    // 4️⃣ Send merged payload
-    const payload = {
-      user_id: userId,
-      access: mergedAccess,
+    const newEntry = {
+      group_id: selectedGroup.value,
+      group_name: selectedGroup.label,
+      devices: selectedDevice.map((d) => d.value),
     };
 
-    console.log("FINAL MERGED PAYLOAD:", payload);
+    const mergedAccess = [
+      ...existingAccess.filter(
+        (a) => a.group_id !== newEntry.group_id
+      ),
+      newEntry,
+    ];
 
-    await apiService.put(Endpoint.ACCESS_MANAGEMENT_SYNC, payload);
+    await apiService.syncUserAccess(userId, mergedAccess);
 
     onSaved?.();
     onClose();
   };
 
+  /* ------------------------------------------------------------
+      UI
+  ------------------------------------------------------------ */
   if (!isOpen) return null;
 
   return (
@@ -149,11 +158,10 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
 
         <label>Group</label>
         <Select
-          isMulti
           options={groupOptions}
           value={selectedGroup}
-          onChange={(v) => setSelectedGroup(v as Option[])}
-          placeholder="Select Groups"
+          onChange={(v) => setSelectedGroup(v as Option)}
+          placeholder="Select Group"
           className="mb-4"
         />
 
@@ -163,12 +171,8 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
           options={deviceOptions}
           value={selectedDevice}
           onChange={(v) => setSelectedDevice(v as Option[])}
-          placeholder={
-            selectedGroup.length === 1
-              ? "Select Devices"
-              : "Choose exactly 1 group to load devices"
-          }
-          isDisabled={selectedGroup.length !== 1}
+          placeholder="Select Devices"
+          isDisabled={!selectedGroup}   // ✅ FIX
           className="mb-4"
         />
 
