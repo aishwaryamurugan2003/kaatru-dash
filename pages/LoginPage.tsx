@@ -1,30 +1,69 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import RiveComponent from "rive-react";
+import { useRive } from "rive-react";
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // ✅ CORRECT RIVE USAGE
+  const { RiveComponent } = useRive({
+    src: "/animations/login.riv",
+    stateMachines: "State Machine 1",
+    autoplay: true,
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/dashboard");
+    setError("");
+
+    if (!email || !password) {
+      setError("Please enter email and password");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        `https://caas.kaatru.org/auth/login?username=${email}&password=${password}`,
+        {
+          method: "POST",
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.access_token) {
+        localStorage.setItem("jwt_token", data.access_token);
+        localStorage.setItem("saved_username", email);
+        navigate("/dashboard");
+      } else {
+        setError(
+          data?.detail?.error_description ||
+            data?.message ||
+            "Invalid credentials"
+        );
+      }
+    } catch {
+      setError("Server error. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="w-full h-screen flex bg-gray-100 font-inter">
 
-      {/* LEFT SIDE - ANIMATED RIVE */}
+      {/* LEFT SIDE - RIVE */}
       <div className="hidden lg:flex w-1/2 bg-[#2563eb] items-center justify-center p-8">
         <div className="w-3/4 h-3/4 rounded-xl overflow-hidden shadow-lg bg-white">
-         <RiveComponent 
-  src="/animations/login.riv"
-  stateMachines="State Machine 1"
-  autoplay
-/>
-
+          {/* ✅ NO PROPS HERE */}
+          <RiveComponent />
         </div>
       </div>
 
@@ -37,18 +76,23 @@ const LoginPage: React.FC = () => {
             Enter your credentials to access the dashboard.
           </p>
 
+          {error && (
+            <div className="mb-4 text-red-600 text-sm bg-red-100 px-4 py-2 rounded">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
 
             <div>
               <label className="block mb-1 text-gray-700 font-medium">Email</label>
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 
-                           focus:ring-blue-500 outline-none text-sm"
-                placeholder="Enter your email"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg 
+                           focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                placeholder="Enter your username/email"
               />
             </div>
 
@@ -58,19 +102,19 @@ const LoginPage: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 
-                           focus:ring-blue-500 outline-none text-sm"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg 
+                           focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                 placeholder="Enter your password"
               />
             </div>
 
             <button
               type="submit"
+              disabled={loading}
               className="w-full bg-[#2563eb] hover:bg-blue-600 text-white py-3 rounded-lg 
-                         font-semibold text-sm transition-all"
+                         font-semibold text-sm transition-all disabled:opacity-60"
             >
-              Sign In
+              {loading ? "Signing In..." : "Sign In"}
             </button>
 
           </form>
