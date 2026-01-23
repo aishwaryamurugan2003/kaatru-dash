@@ -81,29 +81,43 @@ class Production extends ApiService {
     return `${this.#host}${endpoint}`;
   }
 
+  // #getHeaders(endpoint?: string): Record<string, string> | null {
+  //   const backendToken =
+  //     localStorage.getItem("token") || sessionStorage.getItem("token");
+
+  //   const isKeycloakEndpoint =
+  //     endpoint === Endpoint.KEYCLOAK_USERS ||
+  //     endpoint.startsWith(Endpoint.ACCESS_MANAGEMENT);
+
+  //   if (isKeycloakEndpoint) {
+  //     if (!isTokenAlive(this.#keycloakToken)) {
+  //       console.warn("Keycloak token expired → skipping API call");
+  //       return null;
+  //     }
+
+  //     return {
+  //       Authorization: `Bearer ${this.#keycloakToken}`,
+  //     };
+  //   }
+
+  //   return {
+  //     Authorization: `Bearer ${backendToken ?? ""}`,
+  //   };
+  // }
+
   #getHeaders(endpoint?: string): Record<string, string> | null {
-    const backendToken =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
+  const token = localStorage.getItem("token");
 
-    const isKeycloakEndpoint =
-      endpoint === Endpoint.KEYCLOAK_USERS ||
-      endpoint.startsWith(Endpoint.ACCESS_MANAGEMENT);
-
-    if (isKeycloakEndpoint) {
-      if (!isTokenAlive(this.#keycloakToken)) {
-        console.warn("Keycloak token expired → skipping API call");
-        return null;
-      }
-
-      return {
-        Authorization: `Bearer ${this.#keycloakToken}`,
-      };
-    }
-
-    return {
-      Authorization: `Bearer ${backendToken ?? ""}`,
-    };
+  if (!token) {
+    console.warn("❌ No token found");
+    return null;
   }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 
   /* ------------------------------------------------------------
      AUTH

@@ -10,7 +10,6 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ CORRECT RIVE USAGE
   const { RiveComponent } = useRive({
     src: "/animations/login.riv",
     stateMachines: "State Machine 1",
@@ -26,30 +25,41 @@ const LoginPage: React.FC = () => {
       return;
     }
 
+    if (loading) return;
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `https://caas.kaatru.org/auth/login?username=${email}&password=${password}`,
-        {
-          method: "POST",
-        }
-      );
+      const url = `https://caas.kaatru.org/auth/login?username=${encodeURIComponent(
+        email
+      )}&password=${encodeURIComponent(password)}`;
+
+      const response = await fetch(url, {
+        method: "POST",
+      });
 
       const data = await response.json();
+      console.log("LOGIN RESPONSE:", data);
 
       if (response.ok && data.access_token) {
-        localStorage.setItem("jwt_token", data.access_token);
+        // ✅ STORE TOKENS
+        localStorage.setItem("token", data.access_token);
         localStorage.setItem("saved_username", email);
+
+        if (data.refresh_token) {
+          localStorage.setItem("refresh_token", data.refresh_token);
+        }
+
         navigate("/dashboard");
       } else {
         setError(
           data?.detail?.error_description ||
-            data?.message ||
-            "Invalid credentials"
+          data?.detail ||
+          data?.message ||
+          "Invalid credentials"
         );
       }
-    } catch {
+    } catch (err) {
+      console.error("Login error:", err);
       setError("Server error. Please try again later.");
     } finally {
       setLoading(false);
@@ -59,15 +69,14 @@ const LoginPage: React.FC = () => {
   return (
     <div className="w-full h-screen flex bg-gray-100 font-inter">
 
-      {/* LEFT SIDE - RIVE */}
+      {/* LEFT SIDE RIVE */}
       <div className="hidden lg:flex w-1/2 bg-[#2563eb] items-center justify-center p-8">
         <div className="w-3/4 h-3/4 rounded-xl overflow-hidden shadow-lg bg-white">
-          {/* ✅ NO PROPS HERE */}
           <RiveComponent />
         </div>
       </div>
 
-      {/* RIGHT SIDE - LOGIN FORM */}
+      {/* RIGHT SIDE LOGIN */}
       <div className="flex w-full lg:w-1/2 items-center justify-center bg-white px-8">
         <div className="w-full max-w-md">
 
@@ -90,9 +99,8 @@ const LoginPage: React.FC = () => {
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg 
-                           focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                placeholder="Enter your username/email"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                placeholder="Enter username/email"
               />
             </div>
 
@@ -102,17 +110,15 @@ const LoginPage: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg 
-                           focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                placeholder="Enter your password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                placeholder="Enter password"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#2563eb] hover:bg-blue-600 text-white py-3 rounded-lg 
-                         font-semibold text-sm transition-all disabled:opacity-60"
+              className="w-full bg-[#2563eb] hover:bg-blue-600 text-white py-3 rounded-lg font-semibold text-sm transition-all disabled:opacity-60"
             >
               {loading ? "Signing In..." : "Sign In"}
             </button>

@@ -13,14 +13,17 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
 useEffect(() => {
-    const token = import.meta.env.VITE_KEYCLOAK_TOKEN;
+  const token = localStorage.getItem("token");
 
-  if (isTokenAlive(token)) {
+  if (token && isTokenAlive(token)) {
     apiService.setKeycloakToken(token);
+    console.log("✅ Token loaded");
   } else {
-    apiService.clearToken(); // we’ll add this
+    apiService.clearToken();
+    console.log("❌ Token expired or missing");
   }
 }, []);
+
 
   return (
     <BrowserRouter>
