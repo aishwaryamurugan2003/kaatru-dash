@@ -46,9 +46,18 @@ abstract class ApiService {
   abstract patch(endpoint: string, payload: any): Promise<any>;
   abstract getRamanAnalysis(endpoint: string, payload?: Record<string, any>): Promise<any>;
 
-  /* 🔑 NEW HELPERS */
+  /* 🔑 ACCESS HELPERS */
   abstract getUserFullAccess(userId: string): Promise<any[]>;
   abstract syncUserAccess(userId: string, access: any[]): Promise<any>;
+
+  /* 🔥 REALTIME WEBSOCKET */
+  abstract connectDeviceWebSocket(
+    deviceId: string,
+    mqttTopic: string,
+    onMessage: (data: any) => void
+  ): void;
+
+  abstract disconnectAllWebSockets(): void;
 }
 
 /* ------------------------------------------------------------
@@ -57,6 +66,9 @@ abstract class ApiService {
 class Production extends ApiService {
   #host: string;
   #keycloakToken: string | null = null;
+
+  // 🔥 WebSocket channels storage
+  #wsChannels: Record<string, WebSocket> = {};
 
   constructor() {
     super();
@@ -81,43 +93,18 @@ class Production extends ApiService {
     return `${this.#host}${endpoint}`;
   }
 
-  // #getHeaders(endpoint?: string): Record<string, string> | null {
-  //   const backendToken =
-  //     localStorage.getItem("token") || sessionStorage.getItem("token");
-
-  //   const isKeycloakEndpoint =
-  //     endpoint === Endpoint.KEYCLOAK_USERS ||
-  //     endpoint.startsWith(Endpoint.ACCESS_MANAGEMENT);
-
-  //   if (isKeycloakEndpoint) {
-  //     if (!isTokenAlive(this.#keycloakToken)) {
-  //       console.warn("Keycloak token expired → skipping API call");
-  //       return null;
-  //     }
-
-  //     return {
-  //       Authorization: `Bearer ${this.#keycloakToken}`,
-  //     };
-  //   }
-
-  //   return {
-  //     Authorization: `Bearer ${backendToken ?? ""}`,
-  //   };
-  // }
-
   #getHeaders(endpoint?: string): Record<string, string> | null {
-  const token = localStorage.getItem("token");
+    const token = localStorage.getItem("token");
 
-  if (!token) {
-    console.warn("❌ No token found");
-    return null;
+    if (!token) {
+      console.warn("❌ No token found");
+      return null;
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    };
   }
-
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-}
-
 
   /* ------------------------------------------------------------
      AUTH
@@ -198,34 +185,80 @@ class Production extends ApiService {
   }
 
   /* ------------------------------------------------------------
-     🔑 NEW: ACCESS MANAGEMENT HELPERS
+     🔑 ACCESS MANAGEMENT
   ------------------------------------------------------------ */
+  async getUserFullAccess(userId: string): Promise<any[]> {
+    const headers = this.#getHeaders(Endpoint.ACCESS_MANAGEMENT);
+    if (!headers) return [];
 
-  // ✅ SINGLE SOURCE OF TRUTH
-async getUserFullAccess(userId: string): Promise<any[]> {
-  const headers = this.#getHeaders(Endpoint.ACCESS_MANAGEMENT);
-  if (!headers) return [];
+    const res = await axios.get(Endpoint.ACCESS_MANAGEMENT, { headers });
+    const user = res.data.find((u: any) => u.user_id === userId);
+    return user?.access || [];
+  }
 
-  const res = await axios.get(Endpoint.ACCESS_MANAGEMENT, { headers });
-
-  const user = res.data.find((u: any) => u.user_id === userId);
-  return user?.access || [];
-}
-
-
-  // ✅ SAFE SYNC (FULL PAYLOAD ONLY)
   async syncUserAccess(userId: string, access: any[]): Promise<any> {
-    const payload = {
-      user_id: userId,
-      access,
+    const payload = { user_id: userId, access };
+    console.log("SYNC USER ACCESS PAYLOAD:", JSON.stringify(payload, null, 2));
+    return this.put(Endpoint.ACCESS_MANAGEMENT_SYNC, payload);
+  }
+
+  /* ------------------------------------------------------------
+     🔥 REALTIME DEVICE WEBSOCKET
+  ------------------------------------------------------------ */
+  connectDeviceWebSocket(
+    deviceId: string,
+    mqttTopic: string,
+    onMessage: (data: any) => void
+  ) {
+    if (this.#wsChannels[deviceId]) return;
+
+    const topic = mqttTopic.replace("+", deviceId);
+    const url = `wss://bw06.kaatru.org/stream/${topic}`;
+
+    console.log("🔌 WS CONNECT:", url);
+
+    const ws = new WebSocket(url);
+    this.#wsChannels[deviceId] = ws;
+
+    ws.onopen = () => console.log("✅ WS OPEN:", deviceId);
+
+    ws.onmessage = (event) => {
+      try {
+        const json = JSON.parse(event.data);
+        if (!json?.data?.length) return;
+
+        const v = json.data[0].value;
+        const srvtime = json.data[0].srvtime;
+
+        const payload = {
+          id: deviceId,
+          lat: v.lat ?? 0,
+          lon: v.lon ?? v.long ?? 0,
+          sPM2: Number(v.sPM2 ?? 0),
+          sPM10: Number(v.sPM10 ?? 0),
+          temp: Number(v.temp ?? 0),
+          rh: Number(v.rh ?? 0),
+          srvtime,
+        };
+
+        onMessage(payload);
+      } catch (err) {
+        console.error("❌ WS PARSE ERROR:", err);
+      }
     };
 
-    console.log(
-      "SYNC USER ACCESS PAYLOAD:",
-      JSON.stringify(payload, null, 2)
-    );
+    ws.onerror = (e) => console.error("❌ WS ERROR:", deviceId, e);
 
-    return this.put(Endpoint.ACCESS_MANAGEMENT_SYNC, payload);
+    ws.onclose = () => {
+      console.warn("⚠️ WS CLOSED:", deviceId);
+      delete this.#wsChannels[deviceId];
+    };
+  }
+
+  disconnectAllWebSockets() {
+    Object.values(this.#wsChannels).forEach((ws) => ws.close());
+    this.#wsChannels = {};
+    console.log("🧹 All WebSockets disconnected");
   }
 }
 
@@ -271,6 +304,9 @@ class Mock extends ApiService {
   async syncUserAccess(): Promise<any> {
     return { data: {} };
   }
+
+  connectDeviceWebSocket(): void {}
+  disconnectAllWebSockets(): void {}
 }
 
 /* ------------------------------------------------------------
