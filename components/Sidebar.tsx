@@ -191,6 +191,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
               </svg>
             }
           />
+          <NavItem
+  to="/data-visualization"
+  isExpanded={isOpen}
+  label="Data Visualization"
+  icon={
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M11 3v18m4-12v12m4-6v6M3 9h4v12H3z"
+      />
+    </svg>
+  }
+/>
+
         </ul>
       </nav>
     </aside>
