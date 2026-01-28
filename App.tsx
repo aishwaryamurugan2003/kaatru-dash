@@ -39,7 +39,7 @@ function App() {
 
       <div className="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
         <Header setSidebarOpen={setIsSidebarOpen} />
-        <main className="p-4 sm:p-6 lg:p-8 h-full">{children}</main>
+        <main className="p-4 sm:p-6 lg:p-8 flex-1">{children}</main>
       </div>
     </div>
   );

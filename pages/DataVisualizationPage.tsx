@@ -1,22 +1,80 @@
-import LiveMapPanel from "../components/viz/LiveMapPanel";
-import AggregatePanel from "../components/viz/AggregatePanel";
-import DeviceCarousel from "../components/viz/DeviceCarousel";
-import BottomGridPanel from "../components/viz/BottomGridPanel";
-import styles from "../styles/DataViz.module.css";
-import { useDispatch } from "react-redux";
-import { setDevices } from "../redex/slices/dashboardSlice";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import MapView from "../components/MapView";
+import DeviceInfoPanel from "../components/DeviceInfoPanel";
+import LiveChart from "../components/LiveChart";
+import { useDeviceWebSocket } from "../hooks/useDeviceWebSocket";
+import { useDeviceList } from "../hooks/useDeviceList";
+import { DeviceData } from "../types/device";
 
 export default function DataVisualizationPage() {
-      const dispatch = useDispatch();
+
+  // ✅ Dynamic Group
+  const groupId = "GUR";
+
+  // ✅ Load devices + mqtt topic automatically
+  const { deviceIds, mqttTopic } = useDeviceList(groupId);
+
+  // ✅ Live WS data
+  const liveDevices = useDeviceWebSocket(deviceIds, mqttTopic);
+
+  // ✅ Filter active devices (10 sec heartbeat)
+  const deviceList: DeviceData[] = useMemo(() => {
+    const now = Date.now();
+    return Object.values(liveDevices).filter(d =>
+      d?.lat &&
+      d?.lon &&
+      now - d.srvtime < 10000
+    );
+  }, [liveDevices]);
+
+  const [index, setIndex] = useState(0);
+  const [history, setHistory] = useState<DeviceData[]>([]);
+
+  const activeDevice = deviceList[index];
+
+  // 🔄 Rotate active device
+  useEffect(() => {
+    if (!deviceList.length) return;
+    const timer = setInterval(() => {
+      setIndex(i => (i + 1) % deviceList.length);
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [deviceList]);
+
+  // 📊 Chart history
+  useEffect(() => {
+    if (!activeDevice) return;
+    setHistory(h => [...h.slice(-100), activeDevice]);
+  }, [activeDevice]);
 
   return (
-    <div className={styles.container}>
-      <div className={styles.left}><LiveMapPanel /></div>
-      <div className={styles.right}>
-        <AggregatePanel />
-        <DeviceCarousel />
-        <BottomGridPanel />
+    <div style={{ display: "flex", height: "100vh", width: "100%" }}>
+
+      {/* MAP */}
+      <div style={{ width: "50%", height: "100%" }}>
+        <MapView devices={deviceList} activeIndex={index} />
+      </div>
+
+      {/* RIGHT PANEL */}
+      <div style={{ width: "50%", display: "flex", flexDirection: "column" }}>
+
+        <div style={{ height: "25%", borderBottom: "1px solid #ddd" }}>
+          <DeviceInfoPanel device={activeDevice} />
+        </div>
+
+        <div style={{ height: "25%" }}>
+          <LiveChart history={history} />
+        </div>
+
+        <div style={{ height: "50%", background: "#fafafa", padding: 10 }}>
+          Active Devices: <b>{deviceList.length}</b>
+          <br />
+          Loaded Devices: {deviceIds.join(", ")}
+          <br />
+          MQTT Topic: {mqttTopic}
+        </div>
+
       </div>
     </div>
   );
