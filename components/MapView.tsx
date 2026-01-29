@@ -14,9 +14,7 @@ function FlyToDevice({ center }: { center: LatLngTuple }) {
 
   useEffect(() => {
     if (!center) return;
-    map.flyTo(center, 14, {
-      duration: 2,
-    });
+    map.flyTo(center, 14, { duration: 2 });
   }, [center]);
 
   return null;
@@ -24,38 +22,43 @@ function FlyToDevice({ center }: { center: LatLngTuple }) {
 
 export default function MapView({ devices, activeIndex }: Props) {
 
-  // Safe fallback center
+  // ✅ Safe fallback center
   const center: LatLngTuple =
     devices.length > 0 && devices[activeIndex]
       ? [devices[activeIndex].lat, devices[activeIndex].lon]
       : [13.0827, 80.2707]; // Chennai fallback
 
   return (
-    <MapContainer
-      center={center}
-      zoom={14}
-      style={{ height: "100%", width: "100%" }}
-      scrollWheelZoom
-    >
-      {/* Auto move map */}
-      <FlyToDevice center={center} />
+    // ✅ IMPORTANT: Wrapper div OUTSIDE MapContainer
+    <div style={{ width: "100%", height: "100vh" }}>
 
-      <TileLayer
-        attribution='&copy; OpenStreetMap contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <MapContainer
+        center={center}
+        zoom={14}
+        style={{ height: "100%", width: "100%" }}
+        scrollWheelZoom
+      >
+        {/* Auto move map */}
+        <FlyToDevice center={center} />
 
-      {/* Render Markers */}
-      {devices.map((d) => {
-        if (!d.lat || !d.lon) return null; // skip invalid coords
+        <TileLayer
+          attribution='&copy; OpenStreetMap contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-        return (
-          <Marker
-            key={d.id}
-            position={[d.lat, d.lon] as LatLngTuple}
-          />
-        );
-      })}
-    </MapContainer>
+        {/* Render Markers */}
+        {devices.map((d) => {
+          if (!d.lat || !d.lon) return null;
+
+          return (
+            <Marker
+              key={d.id}
+              position={[d.lat, d.lon] as LatLngTuple}
+            />
+          );
+        })}
+
+      </MapContainer>
+    </div>
   );
 }

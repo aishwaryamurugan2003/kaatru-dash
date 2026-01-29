@@ -65,20 +65,31 @@ class Production extends ApiService {
   constructor() {
     super();
     this.#host = import.meta.env.VITE_APP_API_URL_PREFIX || "http://localhost:8000/v1";
+    console.log("🌍 API HOST:", this.#host);
   }
 
   setKeycloakToken(_: string) {}
+
   clearToken() {
     localStorage.removeItem("token");
   }
 
   #getHeaders() {
     const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  // ✅ FIX: Handle absolute + relative URLs safely
+  #buildUrl(endpoint: string) {
+    if (!endpoint) throw new Error("Endpoint is undefined");
+    return endpoint.startsWith("http") ? endpoint : `${this.#host}${endpoint}`;
   }
 
   async login(user: string, pwd: string) {
-    const res = await axios.post(`${this.#host}/login`, { username: user, password: pwd });
+    const url = this.#buildUrl("/login");
+    console.log("➡️ LOGIN URL:", url);
+
+    const res = await axios.post(url, { username: user, password: pwd });
     localStorage.setItem("token", res.data.access_token);
     return res;
   }
@@ -88,23 +99,53 @@ class Production extends ApiService {
   }
 
   async get(endpoint: string, payload?: any) {
-    return axios.get(`${this.#host}${endpoint}`, { params: payload, headers: this.#getHeaders() });
+    const url = this.#buildUrl(endpoint);
+    console.log("➡️ GET:", url);
+
+    return axios.get(url, {
+      params: payload,
+      headers: this.#getHeaders(),
+    });
   }
+
   async post(endpoint: string, payload: any) {
-    return axios.post(`${this.#host}${endpoint}`, payload, { headers: this.#getHeaders() });
+    const url = this.#buildUrl(endpoint);
+    console.log("➡️ POST:", url);
+
+    return axios.post(url, payload, {
+      headers: this.#getHeaders(),
+    });
   }
+
   async put(endpoint: string, payload: any) {
-    return axios.put(`${this.#host}${endpoint}`, payload, { headers: this.#getHeaders() });
+    const url = this.#buildUrl(endpoint);
+    console.log("➡️ PUT:", url);
+
+    return axios.put(url, payload, {
+      headers: this.#getHeaders(),
+    });
   }
+
   async patch(endpoint: string, payload: any) {
-    return axios.patch(`${this.#host}${endpoint}`, payload, { headers: this.#getHeaders() });
+    const url = this.#buildUrl(endpoint);
+    console.log("➡️ PATCH:", url);
+
+    return axios.patch(url, payload, {
+      headers: this.#getHeaders(),
+    });
   }
+
   async getRamanAnalysis(endpoint: string, payload?: any) {
     return this.get(endpoint, payload);
   }
 
-  async getUserFullAccess(): Promise<any[]> { return []; }
-  async syncUserAccess(): Promise<any> { return {}; }
+  async getUserFullAccess(): Promise<any[]> {
+    return [];
+  }
+
+  async syncUserAccess(): Promise<any> {
+    return {};
+  }
 
   /* ------------------------------------------------------------
      ✅ REALTIME DEVICE WEBSOCKET

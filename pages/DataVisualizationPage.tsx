@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import MapView from "../components/MapView";
 import DeviceInfoPanel from "../components/DeviceInfoPanel";
 import LiveChart from "../components/LiveChart";
+
 import { useDeviceWebSocket } from "../hooks/useDeviceWebSocket";
 import { useDeviceList } from "../hooks/useDeviceList";
+import { useDeviceDetails } from "../hooks/useDeviceDetails";
 import { DeviceData } from "../types/device";
 
 export default function DataVisualizationPage() {
@@ -11,30 +13,40 @@ export default function DataVisualizationPage() {
   // ✅ Dynamic Group
   const groupId = "GUR";
 
-  // ✅ Load devices + mqtt topic automatically
+  // ✅ Load devices + mqtt topic
   const { deviceIds, mqttTopic } = useDeviceList(groupId);
 
-  // ✅ Live WS data
+  // ✅ Live WebSocket data
   const liveDevices = useDeviceWebSocket(deviceIds, mqttTopic);
 
-  // ✅ Filter active devices (10 sec heartbeat)
+  // ✅ Static GPS (like Flutter app)
+  const staticGps = useDeviceDetails(deviceIds);
+
+  // ✅ Merge WS + Static GPS
   const deviceList: DeviceData[] = useMemo(() => {
     const now = Date.now();
-    return Object.values(liveDevices).filter(d =>
-      d?.lat &&
-      d?.lon &&
-      now - d.srvtime < 10000
-    );
-  }, [liveDevices]);
+
+    return Object.values(liveDevices)
+      .map(d => {
+        const gps = staticGps[d.id];
+        return {
+          ...d,
+          lat: d.lat || gps?.lat,
+          lon: d.lon || gps?.lon,
+        };
+      })
+      .filter(d => d.lat && d.lon); // ✅ Only require GPS (NOT srvtime)
+  }, [liveDevices, staticGps]);
 
   const [index, setIndex] = useState(0);
   const [history, setHistory] = useState<DeviceData[]>([]);
 
   const activeDevice = deviceList[index];
 
-  // 🔄 Rotate active device
+  // 🔄 Rotate devices
   useEffect(() => {
     if (!deviceList.length) return;
+
     const timer = setInterval(() => {
       setIndex(i => (i + 1) % deviceList.length);
     }, 5000);
@@ -52,27 +64,38 @@ export default function DataVisualizationPage() {
     <div style={{ display: "flex", height: "100vh", width: "100%" }}>
 
       {/* MAP */}
-      <div style={{ width: "50%", height: "100%" }}>
+      <div style={{ width: "50%", height: "100vh" }}>
         <MapView devices={deviceList} activeIndex={index} />
       </div>
 
       {/* RIGHT PANEL */}
       <div style={{ width: "50%", display: "flex", flexDirection: "column" }}>
 
+        {/* Device Info */}
         <div style={{ height: "25%", borderBottom: "1px solid #ddd" }}>
           <DeviceInfoPanel device={activeDevice} />
         </div>
 
+        {/* Live Chart */}
         <div style={{ height: "25%" }}>
           <LiveChart history={history} />
         </div>
 
-        <div style={{ height: "50%", background: "#fafafa", padding: 10 }}>
-          Active Devices: <b>{deviceList.length}</b>
+        {/* Debug Panel */}
+        <div style={{ height: "50%", background: "#fafafa", padding: 10, fontSize: 12 }}>
+          <b>DEBUG INFO</b>
           <br />
-          Loaded Devices: {deviceIds.join(", ")}
+          Group ID: {groupId}
           <br />
           MQTT Topic: {mqttTopic}
+          <br />
+          Total Devices Loaded: {deviceIds.length}
+          <br />
+          Devices With GPS (Shown on Map): {deviceList.length}
+          <br />
+          Active Device Index: {index}
+          <br />
+          Active Device ID: {activeDevice?.id || "None"}
         </div>
 
       </div>

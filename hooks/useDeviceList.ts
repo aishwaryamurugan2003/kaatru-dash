@@ -1,10 +1,6 @@
+// src/hooks/useDeviceList.ts
 import { useEffect, useState } from "react";
-import { apiService } from "../services/api";
-
-interface DeviceListResponse {
-  devices: string[];
-  mqtt_topic: string;
-}
+import axios from "axios";
 
 export function useDeviceList(groupId: string) {
   const [deviceIds, setDeviceIds] = useState<string[]>([]);
@@ -15,18 +11,19 @@ export function useDeviceList(groupId: string) {
 
     const load = async () => {
       try {
-        // ✅ IMPORTANT: Full URL
-        const res = await apiService.get(`https://bw04.kaatru.org/group/${groupId}`);
+        const url = `https://bw04.kaatru.org/group?id=${groupId}`;
+        const res = await axios.get(url);
 
-        console.log("GROUP API RAW:", res.data);
+        console.log("GROUP API:", res.data);
 
-        const ids = res.data?.devices?.map((d: any) => d.device_id) || [];
-        const topic = res.data?.mqtt_topic || "prod/gur/+/sen";
+        // ✅ Correct parsing
+        const ids: string[] = res.data.devices || [];
+        const topic = res.data.group?.[0]?.mqtt_topic || "prod/gur/+/sen";
 
         setDeviceIds(ids);
         setMqttTopic(topic);
-      } catch (err) {
-        console.error("❌ Device list fetch error", err);
+      } catch (e) {
+        console.error("Group fetch failed", e);
       }
     };
 
