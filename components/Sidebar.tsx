@@ -206,6 +206,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
     </svg>
   }
 />
+<NavItem
+  to="/realtime-dashboard"
+  isExpanded={isOpen}
+  label="Realtime Dashboard"
+  icon={
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 3v18h18M9 17v-6m4 6V7m4 10v-4"
+      />
+    </svg>
+  }
+/>
+
 
         </ul>
       </nav>

@@ -6,7 +6,8 @@ import Header from "./components/Header";
 import DataAnalysisPage from "./pages/DataAnalysisPage";
 import LoginPage from "./pages/LoginPage";
 import DeviceAdministrationPage from "./pages/DeviceAdministrationPage";
-import DataVisualizationPage from "./pages/DataVisualizationPage"; // ✅ NEW PAGE
+import DataVisualizationPage from "./pages/DataVisualizationPage"; 
+import RealtimeDashboardPage from "./pages/RealtimeDashboardPage";
 
 import { isTokenAlive } from "./utils/token";
 import { apiService } from "./services/api";
@@ -79,6 +80,14 @@ function App() {
             </DashboardLayout>
           }
         />
+<Route
+  path="/realtime-dashboard"
+  element={
+    <DashboardLayout>
+      <RealtimeDashboardPage />
+    </DashboardLayout>
+  }
+/>
       </Routes>
     </BrowserRouter>
   );
