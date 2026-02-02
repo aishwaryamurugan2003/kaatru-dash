@@ -12,9 +12,6 @@ const DeviceAdministrationPage: React.FC = () => {
   const [editUser, setEditUser] = useState<any>(null);
   const [searchText, setSearchText] = useState("");
 
-  /* ------------------------------------------------------------
-     LOAD USERS
-  ------------------------------------------------------------ */
   const fetchUsers = async () => {
     try {
       const res = await apiService.get(Endpoint.ACCESS_MANAGEMENT);
@@ -42,9 +39,6 @@ const DeviceAdministrationPage: React.FC = () => {
     fetchUsers();
   }, []);
 
-  /* ------------------------------------------------------------
-     TABLE COLUMNS
-  ------------------------------------------------------------ */
   const columns = [
     { title: "S.No", dataIndex: "sno", width: 80 },
     { title: "Username", dataIndex: "username" },
@@ -70,9 +64,7 @@ const DeviceAdministrationPage: React.FC = () => {
     },
   ];
 
-  /* ------------------------------------------------------------
-     GROUP CHIP RENDER
-  ------------------------------------------------------------ */
+
   const GroupChips = ({ access }) => {
     if (!access || access.length === 0) return "—";
 
@@ -149,7 +141,7 @@ const DeviceAdministrationPage: React.FC = () => {
       <AddPermissionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSaved={fetchUsers}   // ✅ IMPORTANT FIX
+        onSaved={fetchUsers}   
       />
 
       {/* EDIT */}

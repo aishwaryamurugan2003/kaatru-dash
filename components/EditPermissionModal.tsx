@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Select from "react-select";
 import { apiService } from "../services/api";
 import { Endpoint } from "../services/api";
+import Loading from "../components/Loading"; // ✅ IMPORT LOADING
 
 interface Option {
   label: string;
@@ -10,13 +11,10 @@ interface Option {
 
 const SELECT_ALL_VALUE = "__ALL__";
 
-/* ------------------------------------------------------------
-   SCROLLABLE DEVICE SELECT STYLES
------------------------------------------------------------- */
 const deviceSelectStyles = {
   valueContainer: (base: any) => ({
     ...base,
-    maxHeight: "120px",   // 👈 adjust height if needed
+    maxHeight: "120px",
     overflowY: "auto",
   }),
   menu: (base: any) => ({
@@ -30,6 +28,7 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
   const [deviceOptions, setDeviceOptions] = useState<Option[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Option | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<Option[]>([]);
+  const [saving, setSaving] = useState(false); // ✅ LOADING STATE
 
   useEffect(() => {
     if (user) {
@@ -38,12 +37,8 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
     }
   }, [user]);
 
-  /* ------------------------------------------------------------
-      LOAD ALL GROUPS
-  ------------------------------------------------------------ */
   const fetchGroups = async () => {
     const res = await apiService.getRamanAnalysis(Endpoint.GROUP_ALL);
-
     if (Array.isArray(res?.data)) {
       setGroupOptions(
         res.data.map((g: any) => ({
@@ -54,9 +49,6 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
     }
   };
 
-  /* ------------------------------------------------------------
-      PREFILL (FIRST GROUP ONLY – EDIT MODE)
-  ------------------------------------------------------------ */
   const preloadFirstUserGroup = () => {
     if (!user?.access || user.access.length === 0) return;
 
@@ -70,16 +62,14 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
     fetchDevices(g.group_id, g.devices);
   };
 
-  /* ------------------------------------------------------------
-      FETCH DEVICE LIST (WITH SELECT ALL)
-  ------------------------------------------------------------ */
   const fetchDevices = async (
     groupId: string,
     preselected?: string[]
   ) => {
-    const res = await apiService.getRamanAnalysis(Endpoint.GROUP_DEVICES, {
-      id: groupId,
-    });
+    const res = await apiService.getRamanAnalysis(
+      Endpoint.GROUP_DEVICES,
+      { id: groupId }
+    );
 
     if (res?.data?.devices) {
       const devices: Option[] = res.data.devices.map((d: string) => ({
@@ -107,102 +97,123 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
   };
 
   /* ------------------------------------------------------------
-      SAVE (SAFE MERGE + SYNC)
+      SAVE WITH LOADING
   ------------------------------------------------------------ */
   const saveChanges = async () => {
     if (!selectedGroup) return;
 
-    const userId = user.key;
+    setSaving(true); // ✅ SHOW LOADING
 
-    const existingAccess = await apiService.getUserFullAccess(userId);
+    try {
+      const userId = user.key;
 
-    const updatedEntry = {
-      group_id: selectedGroup.value,
-      group_name: selectedGroup.label,
-      devices: selectedDevice.map((d) => d.value),
-    };
+      const existingAccess =
+        await apiService.getUserFullAccess(userId);
 
-    const mergedAccess = [
-      ...existingAccess.filter(
-        (a) => a.group_id !== updatedEntry.group_id
-      ),
-      updatedEntry,
-    ];
+      const updatedEntry = {
+        group_id: selectedGroup.value,
+        group_name: selectedGroup.label,
+        devices: selectedDevice
+          .map((d) => d.value)
+          .filter((v) => v !== SELECT_ALL_VALUE),
+      };
 
-    if (mergedAccess.length < existingAccess.length) {
-      alert("Unsafe update blocked (possible data loss)");
-      return;
+      const mergedAccess = [
+        ...existingAccess.filter(
+          (a) => a.group_id !== updatedEntry.group_id
+        ),
+        updatedEntry,
+      ];
+
+      if (mergedAccess.length < existingAccess.length) {
+        alert("Unsafe update blocked (possible data loss)");
+        return;
+      }
+
+      await apiService.syncUserAccess(userId, mergedAccess);
+
+      onUpdated();
+      onClose();
+    } catch (err) {
+      console.error("Failed to save permissions", err);
+      alert("Failed to save permissions");
+    } finally {
+      setSaving(false); // ✅ HIDE LOADING
     }
-
-    await apiService.syncUserAccess(userId, mergedAccess);
-
-    onUpdated();
-    onClose();
   };
 
-  /* ------------------------------------------------------------
-      UI
-  ------------------------------------------------------------ */
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-      <div className="bg-white p-6 rounded-lg w-[500px]">
-        <h2 className="text-xl font-bold mb-4">Edit Permission</h2>
+    <>
+      {/* ✅ FULLSCREEN LOADING */}
+      {saving && <Loading fullScreen text="Saving changes..." />}
 
-        <label>User</label>
-        <input
-          value={user?.username}
-          disabled
-          className="border px-3 py-2 mb-4 w-full bg-gray-100"
-        />
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-lg w-[500px]">
+          <h2 className="text-xl font-bold mb-4">
+            Edit Permission
+          </h2>
 
-        <label>Group</label>
-        <Select
-          options={groupOptions}
-          value={selectedGroup}
-          onChange={onGroupChange}
-          className="mb-4"
-        />
+          <label>User</label>
+          <input
+            value={user?.username}
+            disabled
+            className="border px-3 py-2 mb-4 w-full bg-gray-100"
+          />
 
-        <label>Devices</label>
-        <Select
-          isMulti
-          options={deviceOptions}
-          value={selectedDevice}
-          styles={deviceSelectStyles}   
-          className="mb-4"
-          onChange={(selected) => {
-            const values = selected as Option[];
+          <label>Group</label>
+          <Select
+            options={groupOptions}
+            value={selectedGroup}
+            onChange={onGroupChange}
+            className="mb-4"
+          />
 
-            const hasSelectAll = values.some(
-              (v) => v.value === SELECT_ALL_VALUE
-            );
+          <label>Devices</label>
+          <Select
+            isMulti
+            options={deviceOptions}
+            value={selectedDevice}
+            styles={deviceSelectStyles}
+            className="mb-4"
+            onChange={(selected) => {
+              const values = selected as Option[];
 
-            if (hasSelectAll) {
-              const allDevices = deviceOptions.filter(
-                (d) => d.value !== SELECT_ALL_VALUE
+              const hasSelectAll = values.some(
+                (v) => v.value === SELECT_ALL_VALUE
               );
-              setSelectedDevice(allDevices);
-            } else {
-              setSelectedDevice(values);
-            }
-          }}
-        />
 
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="border px-4 py-2 rounded">
-            Cancel
-          </button>
-          <button
-            onClick={saveChanges}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Save
-          </button>
+              if (hasSelectAll) {
+                const allDevices = deviceOptions.filter(
+                  (d) => d.value !== SELECT_ALL_VALUE
+                );
+                setSelectedDevice(allDevices);
+              } else {
+                setSelectedDevice(values);
+              }
+            }}
+          />
+
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="border px-4 py-2 rounded"
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={saveChanges}
+              disabled={saving}
+              className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-60"
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

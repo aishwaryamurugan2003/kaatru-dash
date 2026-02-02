@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Select from "react-select";
 import { apiService } from "../services/api";
 import { Endpoint } from "../services/api";
+import Loading from "../components/Loading"; // ✅ IMPORT LOADING
 
 interface Props {
   isOpen: boolean;
@@ -31,20 +32,29 @@ const deviceSelectStyles = {
   }),
 };
 
-const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
+const AddPermissionModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onSaved,
+}) => {
   const [userOptions, setUserOptions] = useState<Option[]>([]);
   const [groupOptions, setGroupOptions] = useState<Option[]>([]);
   const [deviceOptions, setDeviceOptions] = useState<Option[]>([]);
 
-  const [selectedUser, setSelectedUser] = useState<Option | null>(null);
-  const [selectedGroup, setSelectedGroup] = useState<Option | null>(null);
-  const [selectedDevice, setSelectedDevice] = useState<Option[]>([]);
+  const [selectedUser, setSelectedUser] =
+    useState<Option | null>(null);
+  const [selectedGroup, setSelectedGroup] =
+    useState<Option | null>(null);
+  const [selectedDevice, setSelectedDevice] =
+    useState<Option[]>([]);
+
+  const [saving, setSaving] = useState(false); // ✅ LOADING STATE
 
   useEffect(() => {
     if (isOpen) {
+      resetState();
       fetchUsers();
       fetchGroups();
-      resetState();
     }
   }, [isOpen]);
 
@@ -74,10 +84,10 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
       LOAD USERS
   ------------------------------------------------------------ */
   const fetchUsers = async () => {
-    const res = await apiService.getRamanAnalysis(Endpoint.KEYCLOAK_USERS, {
-      first: 0,
-      max: 50,
-    });
+    const res = await apiService.getRamanAnalysis(
+      Endpoint.KEYCLOAK_USERS,
+      { first: 0, max: 50 }
+    );
 
     if (Array.isArray(res?.data)) {
       setUserOptions(
@@ -93,7 +103,9 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
       LOAD GROUPS
   ------------------------------------------------------------ */
   const fetchGroups = async () => {
-    const res = await apiService.getRamanAnalysis(Endpoint.GROUP_ALL);
+    const res = await apiService.getRamanAnalysis(
+      Endpoint.GROUP_ALL
+    );
 
     if (Array.isArray(res?.data)) {
       setGroupOptions(
@@ -109,15 +121,18 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
       LOAD DEVICES (WITH SELECT ALL)
   ------------------------------------------------------------ */
   const fetchDevices = async (groupId: string) => {
-    const res = await apiService.getRamanAnalysis(Endpoint.GROUP_DEVICES, {
-      id: groupId,
-    });
+    const res = await apiService.getRamanAnalysis(
+      Endpoint.GROUP_DEVICES,
+      { id: groupId }
+    );
 
     if (res?.data?.devices) {
-      const devices: Option[] = res.data.devices.map((d: string) => ({
-        label: d,
-        value: d,
-      }));
+      const devices: Option[] = res.data.devices.map(
+        (d: string) => ({
+          label: d,
+          value: d,
+        })
+      );
 
       setDeviceOptions([
         { label: "Select All Devices", value: SELECT_ALL_VALUE },
@@ -127,34 +142,47 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
   };
 
   /* ------------------------------------------------------------
-      SAVE
+      SAVE WITH LOADING
   ------------------------------------------------------------ */
   const handleSave = async () => {
     if (!selectedUser) return alert("Select user");
     if (!selectedGroup) return alert("Select group");
-    if (selectedDevice.length === 0) return alert("Select devices");
+    if (selectedDevice.length === 0)
+      return alert("Select devices");
 
-    const userId = selectedUser.value;
+    setSaving(true); // ✅ SHOW LOADER
 
-    const existingAccess = await apiService.getUserFullAccess(userId);
+    try {
+      const userId = selectedUser.value;
 
-    const newEntry = {
-      group_id: selectedGroup.value,
-      group_name: selectedGroup.label,
-      devices: selectedDevice.map((d) => d.value),
-    };
+      const existingAccess =
+        await apiService.getUserFullAccess(userId);
 
-    const mergedAccess = [
-      ...existingAccess.filter(
-        (a) => a.group_id !== newEntry.group_id
-      ),
-      newEntry,
-    ];
+      const newEntry = {
+        group_id: selectedGroup.value,
+        group_name: selectedGroup.label,
+        devices: selectedDevice
+          .map((d) => d.value)
+          .filter((v) => v !== SELECT_ALL_VALUE),
+      };
 
-    await apiService.syncUserAccess(userId, mergedAccess);
+      const mergedAccess = [
+        ...existingAccess.filter(
+          (a) => a.group_id !== newEntry.group_id
+        ),
+        newEntry,
+      ];
 
-    onSaved?.();
-    onClose();
+      await apiService.syncUserAccess(userId, mergedAccess);
+
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      console.error("Failed to save permission", err);
+      alert("Failed to save permission");
+    } finally {
+      setSaving(false); // ✅ HIDE LOADER
+    }
   };
 
   /* ------------------------------------------------------------
@@ -163,68 +191,87 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-      <div className="bg-white rounded-lg p-6 w-[500px] shadow-lg">
-        <h2 className="text-xl font-bold mb-4">Add Permission</h2>
+    <>
+      {/* ✅ FULLSCREEN LOADING */}
+      {saving && (
+        <Loading fullScreen text="Saving permission..." />
+      )}
 
-        <label>User</label>
-        <Select
-          options={userOptions}
-          value={selectedUser}
-          onChange={(v) => setSelectedUser(v as Option)}
-          placeholder="Select User"
-          className="mb-4"
-        />
+      <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+        <div className="bg-white rounded-lg p-6 w-[500px] shadow-lg">
+          <h2 className="text-xl font-bold mb-4">
+            Add Permission
+          </h2>
 
-        <label>Group</label>
-        <Select
-          options={groupOptions}
-          value={selectedGroup}
-          onChange={(v) => setSelectedGroup(v as Option)}
-          placeholder="Select Group"
-          className="mb-4"
-        />
-
-        <label>Devices</label>
-        <Select
-          isMulti
-          options={deviceOptions}
-          value={selectedDevice}
-          styles={deviceSelectStyles}
-          isDisabled={!selectedGroup}
-          placeholder="Select Devices"
-          className="mb-4"
-          onChange={(selected) => {
-            const values = selected as Option[];
-
-            const hasSelectAll = values.some(
-              (v) => v.value === SELECT_ALL_VALUE
-            );
-
-            if (hasSelectAll) {
-              const allDevices = deviceOptions.filter(
-                (d) => d.value !== SELECT_ALL_VALUE
-              );
-              setSelectedDevice(allDevices);
-            } else {
-              setSelectedDevice(values);
+          <label>User</label>
+          <Select
+            options={userOptions}
+            value={selectedUser}
+            onChange={(v) =>
+              setSelectedUser(v as Option)
             }
-          }}
-        />
+            placeholder="Select User"
+            className="mb-4"
+          />
 
-        <div className="flex justify-end gap-3 mt-4">
-          <button onClick={onClose} className="px-4 py-2 border rounded">
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded"
-          >
-            Save
-          </button>
+          <label>Group</label>
+          <Select
+            options={groupOptions}
+            value={selectedGroup}
+            onChange={(v) =>
+              setSelectedGroup(v as Option)
+            }
+            placeholder="Select Group"
+            className="mb-4"
+          />
+
+          <label>Devices</label>
+          <Select
+            isMulti
+            options={deviceOptions}
+            value={selectedDevice}
+            styles={deviceSelectStyles}
+            isDisabled={!selectedGroup}
+            placeholder="Select Devices"
+            className="mb-4"
+            onChange={(selected) => {
+              const values = selected as Option[];
+
+              const hasSelectAll = values.some(
+                (v) => v.value === SELECT_ALL_VALUE
+              );
+
+              if (hasSelectAll) {
+                const allDevices =
+                  deviceOptions.filter(
+                    (d) => d.value !== SELECT_ALL_VALUE
+                  );
+                setSelectedDevice(allDevices);
+              } else {
+                setSelectedDevice(values);
+              }
+            }}
+          />
+
+          <div className="flex justify-end gap-3 mt-4">
+            <button
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2 border rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-60"
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

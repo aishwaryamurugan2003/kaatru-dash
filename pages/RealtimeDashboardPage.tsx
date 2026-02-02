@@ -3,6 +3,7 @@ import { apiService, Endpoint } from "../services/api";
 import { useRealtimeDevices } from "../hooks/useRealtimeDevices";
 import RealtimeChart from "../components/RealtimeChart";
 import RealtimeMapAll from "@/components/RealtimeMapAll";
+import Loading from "../components/Loading"; // ✅ IMPORT LOADING
 
 const RealtimeDashboardPage: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
@@ -10,11 +11,12 @@ const RealtimeDashboardPage: React.FC = () => {
   const [groupDevices, setGroupDevices] = useState<string[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true); // ✅ LOADING STATE
 
-  // LIVE DEVICE DATA
+  // LIVE DEVICE DATA (WEBSOCKET / POLLING)
   const devices = useRealtimeDevices(selectedGroup, selectedDevices);
 
-  // ✅ ACTIVE DEVICE IDS (STABLE ORDER)
+  /* ✅ ACTIVE DEVICE IDS (STABLE ORDER) */
   const activeDeviceIds = useMemo(() => {
     return Object.keys(devices).sort();
   }, [devices]);
@@ -22,28 +24,58 @@ const RealtimeDashboardPage: React.FC = () => {
   const currentDeviceId = activeDeviceIds[currentIndex];
   const device = devices[currentDeviceId];
 
-  /* FETCH GROUPS */
+  /* ------------------------------------------------------------
+      FETCH GROUPS
+  ------------------------------------------------------------ */
   useEffect(() => {
-    apiService.get(Endpoint.GROUP_ALL).then((res: any) => {
-      setGroups(Array.isArray(res.data) ? res.data : res.data.group || []);
-    });
+    const fetchGroups = async () => {
+      try {
+        setLoading(true);
+        const res: any = await apiService.get(Endpoint.GROUP_ALL);
+        setGroups(Array.isArray(res.data) ? res.data : res.data.group || []);
+      } catch (err) {
+        console.error("Failed to load groups", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGroups();
   }, []);
 
-  /* FETCH DEVICES WHEN GROUP SELECTED */
+  /* ------------------------------------------------------------
+      FETCH DEVICES WHEN GROUP SELECTED
+  ------------------------------------------------------------ */
   useEffect(() => {
     if (!selectedGroup) return;
 
-    apiService.get(Endpoint.GROUP_DEVICES, { id: selectedGroup }).then((res: any) => {
-      const devices = res.data.devices || [];
-      setGroupDevices(devices);
+    const fetchDevices = async () => {
+      try {
+        setLoading(true);
+        const res: any = await apiService.get(
+          Endpoint.GROUP_DEVICES,
+          { id: selectedGroup }
+        );
 
-      // ✅ Auto select ALL devices
-      setSelectedDevices(devices);
-      setCurrentIndex(0);
-    });
+        const devices = res.data.devices || [];
+        setGroupDevices(devices);
+
+        // ✅ Auto select ALL devices
+        setSelectedDevices(devices);
+        setCurrentIndex(0);
+      } catch (err) {
+        console.error("Failed to load group devices", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDevices();
   }, [selectedGroup]);
 
-  /* ✅ ROTATE DEVICE EVERY 5 SECONDS (FIXED) */
+  /* ------------------------------------------------------------
+      ROTATE DEVICE EVERY 5 SECONDS
+  ------------------------------------------------------------ */
   useEffect(() => {
     if (activeDeviceIds.length === 0) return;
 
@@ -55,7 +87,7 @@ const RealtimeDashboardPage: React.FC = () => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeDeviceIds.length]); // 🔥 IMPORTANT FIX
+  }, [activeDeviceIds.length]);
 
   /* SAFETY RESET */
   useEffect(() => {
@@ -66,8 +98,17 @@ const RealtimeDashboardPage: React.FC = () => {
 
   function toggleDevice(id: string) {
     setSelectedDevices((prev) =>
-      prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
+      prev.includes(id)
+        ? prev.filter((d) => d !== id)
+        : [...prev, id]
     );
+  }
+
+  /* ------------------------------------------------------------
+      LOADING SCREEN
+  ------------------------------------------------------------ */
+  if (loading) {
+    return <Loading fullScreen text="Loading realtime dashboard..." />;
   }
 
   return (
@@ -82,7 +123,9 @@ const RealtimeDashboardPage: React.FC = () => {
         >
           <option value="">Select Group</option>
           {groups.map((g: any) => (
-            <option key={g.id} value={g.id}>{g.name}</option>
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
           ))}
         </select>
 
@@ -103,7 +146,7 @@ const RealtimeDashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ✅ DEBUG INFO */}
+      {/* DEBUG INFO */}
       <div className="flex gap-6 text-sm font-bold">
         <div className="text-green-600">
           Active Devices: {activeDeviceIds.length}
@@ -116,11 +159,14 @@ const RealtimeDashboardPage: React.FC = () => {
       {/* MAIN GRID */}
       <div className="flex gap-4">
 
-        {/* LIVE MAP (ALL DEVICES) */}
+        {/* LIVE MAP */}
         <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow p-2">
           <h2 className="font-semibold mb-2">Live Map</h2>
           <div className="h-[400px] rounded overflow-hidden">
-            <RealtimeMapAll devices={devices} activeId={currentDeviceId} />
+            <RealtimeMapAll
+              devices={devices}
+              activeId={currentDeviceId}
+            />
           </div>
         </div>
 
@@ -134,17 +180,34 @@ const RealtimeDashboardPage: React.FC = () => {
             <SensorCard label="Temp" value={device?.temp ?? "--"} />
             <SensorCard label="Humidity" value={device?.rh ?? "--"} />
 
-            {device?.nh3_ppm && <SensorCard label="NH3" value={device.nh3_ppm} />}
-            {device?.co_ppb && <SensorCard label="CO" value={device.co_ppb} />}
-            {device?.so2_ppb && <SensorCard label="SO2" value={device.so2_ppb} />}
-            {device?.no2_ppb && <SensorCard label="NO2" value={device.no2_ppb} />}
-            {device?.o3_ppb_compensated && <SensorCard label="O3" value={device.o3_ppb_compensated} />}
-            {device?.k30Co2 && <SensorCard label="CO2" value={device.k30Co2} />}
+            {device?.nh3_ppm && (
+              <SensorCard label="NH3" value={device.nh3_ppm} />
+            )}
+            {device?.co_ppb && (
+              <SensorCard label="CO" value={device.co_ppb} />
+            )}
+            {device?.so2_ppb && (
+              <SensorCard label="SO2" value={device.so2_ppb} />
+            )}
+            {device?.no2_ppb && (
+              <SensorCard label="NO2" value={device.no2_ppb} />
+            )}
+            {device?.o3_ppb_compensated && (
+              <SensorCard
+                label="O3"
+                value={device.o3_ppb_compensated}
+              />
+            )}
+            {device?.k30Co2 && (
+              <SensorCard label="CO2" value={device.k30Co2} />
+            )}
           </div>
 
           {/* LIVE CHART */}
           <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow p-3">
-            <h2 className="font-semibold mb-2">Last 5 Minutes (PM2.5)</h2>
+            <h2 className="font-semibold mb-2">
+              Last 5 Minutes (PM2.5)
+            </h2>
             <div className="h-[250px]">
               <RealtimeChart value={Number(device?.sPM2)} />
             </div>
@@ -156,7 +219,13 @@ const RealtimeDashboardPage: React.FC = () => {
   );
 };
 
-const SensorCard = ({ label, value }: { label: string; value: string | number }) => (
+const SensorCard = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
     <div className="text-sm text-gray-500">{label}</div>
     <div className="text-xl font-bold">{value}</div>
