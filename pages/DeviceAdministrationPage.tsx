@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { Table } from "antd";
+import { Table, Tooltip } from "antd";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { apiService } from "../services/api";
 import { Endpoint } from "../services/api";
 import AddPermissionModal from "../components/AddPermissionModal";
-import { Tooltip } from "antd";
 import EditPermissionModal from "../components/EditPermissionModal";
 
 const DeviceAdministrationPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
-
   const [searchText, setSearchText] = useState("");
 
+  /* ------------------------------------------------------------
+     LOAD USERS
+  ------------------------------------------------------------ */
   const fetchUsers = async () => {
     try {
       const res = await apiService.get(Endpoint.ACCESS_MANAGEMENT);
@@ -41,10 +42,18 @@ const DeviceAdministrationPage: React.FC = () => {
     fetchUsers();
   }, []);
 
+  /* ------------------------------------------------------------
+     TABLE COLUMNS
+  ------------------------------------------------------------ */
   const columns = [
     { title: "S.No", dataIndex: "sno", width: 80 },
     { title: "Username", dataIndex: "username" },
-    {title: "Groups", dataIndex: "groups", key: "groups", render: (_, record) => <GroupChips access={record.access} />,},
+    {
+      title: "Groups",
+      dataIndex: "groups",
+      key: "groups",
+      render: (_, record) => <GroupChips access={record.access} />,
+    },
     { title: "Email Address", dataIndex: "email" },
     {
       title: "Actions",
@@ -61,44 +70,48 @@ const DeviceAdministrationPage: React.FC = () => {
     },
   ];
 
+  /* ------------------------------------------------------------
+     GROUP CHIP RENDER
+  ------------------------------------------------------------ */
+  const GroupChips = ({ access }) => {
+    if (!access || access.length === 0) return "—";
 
-const GroupChips = ({ access }) => {
-  if (!access || access.length === 0) return "—";
+    const firstThree = access.slice(0, 3);
+    const remaining = access.slice(3);
 
-  const firstThree = access.slice(0, 3);
-  const remaining = access.slice(3);
-
-  return (
-    <div className="flex flex-wrap gap-2 items-center">
-      {firstThree.map((g) => (
-        <span
-          key={g.group_id}
-          className="px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-700"
-        >
-          {g.group_name}
-        </span>
-      ))}
-
-      {remaining.length > 0 && (
-        <Tooltip
-          title={
-            <div className="flex flex-col gap-1">
-              {remaining.map((g) => (
-                <span key={g.group_id}>{g.group_name}</span>
-              ))}
-            </div>
-          }
-        >
-          <span className="px-2 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-700 cursor-pointer">
-            +{remaining.length}
+    return (
+      <div className="flex flex-wrap gap-2 items-center">
+        {firstThree.map((g) => (
+          <span
+            key={g.group_id}
+            className="px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-700"
+          >
+            {g.group_name}
           </span>
-        </Tooltip>
-      )}
-    </div>
-  );
-};
+        ))}
 
+        {remaining.length > 0 && (
+          <Tooltip
+            title={
+              <div className="flex flex-col gap-1">
+                {remaining.map((g) => (
+                  <span key={g.group_id}>{g.group_name}</span>
+                ))}
+              </div>
+            }
+          >
+            <span className="px-2 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-700 cursor-pointer">
+              +{remaining.length}
+            </span>
+          </Tooltip>
+        )}
+      </div>
+    );
+  };
 
+  /* ------------------------------------------------------------
+     UI
+  ------------------------------------------------------------ */
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Device Management</h1>
@@ -136,6 +149,7 @@ const GroupChips = ({ access }) => {
       <AddPermissionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onSaved={fetchUsers}   // ✅ IMPORTANT FIX
       />
 
       {/* EDIT */}

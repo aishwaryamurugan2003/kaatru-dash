@@ -14,6 +14,23 @@ interface Option {
   value: string;
 }
 
+const SELECT_ALL_VALUE = "__ALL__";
+
+/* ------------------------------------------------------------
+   SCROLLABLE DEVICE SELECT STYLES
+------------------------------------------------------------ */
+const deviceSelectStyles = {
+  valueContainer: (base: any) => ({
+    ...base,
+    maxHeight: "120px",
+    overflowY: "auto",
+  }),
+  menu: (base: any) => ({
+    ...base,
+    zIndex: 9999,
+  }),
+};
+
 const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
   const [userOptions, setUserOptions] = useState<Option[]>([]);
   const [groupOptions, setGroupOptions] = useState<Option[]>([]);
@@ -36,13 +53,13 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
   ------------------------------------------------------------ */
   const resetState = () => {
     setSelectedUser(null);
-    setSelectedGroup(null);   // ✅ FIX
+    setSelectedGroup(null);
     setSelectedDevice([]);
     setDeviceOptions([]);
   };
 
   /* ------------------------------------------------------------
-      LOAD DEVICES (ONLY WHEN GROUP SELECTED)
+      LOAD DEVICES WHEN GROUP SELECTED
   ------------------------------------------------------------ */
   useEffect(() => {
     if (selectedGroup) {
@@ -89,7 +106,7 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
   };
 
   /* ------------------------------------------------------------
-      LOAD DEVICES FOR GROUP
+      LOAD DEVICES (WITH SELECT ALL)
   ------------------------------------------------------------ */
   const fetchDevices = async (groupId: string) => {
     const res = await apiService.getRamanAnalysis(Endpoint.GROUP_DEVICES, {
@@ -97,17 +114,20 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
     });
 
     if (res?.data?.devices) {
-      setDeviceOptions(
-        res.data.devices.map((d: string) => ({
-          label: d,
-          value: d,
-        }))
-      );
+      const devices: Option[] = res.data.devices.map((d: string) => ({
+        label: d,
+        value: d,
+      }));
+
+      setDeviceOptions([
+        { label: "Select All Devices", value: SELECT_ALL_VALUE },
+        ...devices,
+      ]);
     }
   };
 
   /* ------------------------------------------------------------
-      SAVE (SAFE MERGE + SYNC)
+      SAVE
   ------------------------------------------------------------ */
   const handleSave = async () => {
     if (!selectedUser) return alert("Select user");
@@ -170,10 +190,26 @@ const AddPermissionModal: React.FC<Props> = ({ isOpen, onClose, onSaved }) => {
           isMulti
           options={deviceOptions}
           value={selectedDevice}
-          onChange={(v) => setSelectedDevice(v as Option[])}
+          styles={deviceSelectStyles}
+          isDisabled={!selectedGroup}
           placeholder="Select Devices"
-          isDisabled={!selectedGroup}   // ✅ FIX
           className="mb-4"
+          onChange={(selected) => {
+            const values = selected as Option[];
+
+            const hasSelectAll = values.some(
+              (v) => v.value === SELECT_ALL_VALUE
+            );
+
+            if (hasSelectAll) {
+              const allDevices = deviceOptions.filter(
+                (d) => d.value !== SELECT_ALL_VALUE
+              );
+              setSelectedDevice(allDevices);
+            } else {
+              setSelectedDevice(values);
+            }
+          }}
         />
 
         <div className="flex justify-end gap-3 mt-4">

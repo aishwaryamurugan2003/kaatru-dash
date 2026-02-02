@@ -45,7 +45,6 @@ abstract class ApiService {
   abstract getUserFullAccess(userId: string): Promise<any[]>;
   abstract syncUserAccess(userId: string, access: any[]): Promise<any>;
 
-  // ✅ SINGLE DEVICE WS (MULTI DEVICE handled in hook)
   abstract connectDeviceWebSocket(
     deviceId: string,
     mqttTopic: string,
@@ -64,7 +63,8 @@ class Production extends ApiService {
 
   constructor() {
     super();
-    this.#host = import.meta.env.VITE_APP_API_URL_PREFIX || "http://localhost:8000/v1";
+    this.#host =
+      import.meta.env.VITE_APP_API_URL_PREFIX || "http://localhost:8000/v1";
     console.log("🌍 API HOST:", this.#host);
   }
 
@@ -79,17 +79,19 @@ class Production extends ApiService {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // ✅ FIX: Handle absolute + relative URLs safely
   #buildUrl(endpoint: string) {
     if (!endpoint) throw new Error("Endpoint is undefined");
-    return endpoint.startsWith("http") ? endpoint : `${this.#host}${endpoint}`;
+    return endpoint.startsWith("http")
+      ? endpoint
+      : `${this.#host}${endpoint}`;
   }
 
   async login(user: string, pwd: string) {
     const url = this.#buildUrl("/login");
-    console.log("➡️ LOGIN URL:", url);
-
-    const res = await axios.post(url, { username: user, password: pwd });
+    const res = await axios.post(url, {
+      username: user,
+      password: pwd,
+    });
     localStorage.setItem("token", res.data.access_token);
     return res;
   }
@@ -100,8 +102,6 @@ class Production extends ApiService {
 
   async get(endpoint: string, payload?: any) {
     const url = this.#buildUrl(endpoint);
-    console.log("➡️ GET:", url);
-
     return axios.get(url, {
       params: payload,
       headers: this.#getHeaders(),
@@ -110,8 +110,6 @@ class Production extends ApiService {
 
   async post(endpoint: string, payload: any) {
     const url = this.#buildUrl(endpoint);
-    console.log("➡️ POST:", url);
-
     return axios.post(url, payload, {
       headers: this.#getHeaders(),
     });
@@ -119,8 +117,6 @@ class Production extends ApiService {
 
   async put(endpoint: string, payload: any) {
     const url = this.#buildUrl(endpoint);
-    console.log("➡️ PUT:", url);
-
     return axios.put(url, payload, {
       headers: this.#getHeaders(),
     });
@@ -128,8 +124,6 @@ class Production extends ApiService {
 
   async patch(endpoint: string, payload: any) {
     const url = this.#buildUrl(endpoint);
-    console.log("➡️ PATCH:", url);
-
     return axios.patch(url, payload, {
       headers: this.#getHeaders(),
     });
@@ -139,29 +133,44 @@ class Production extends ApiService {
     return this.get(endpoint, payload);
   }
 
-  async getUserFullAccess(): Promise<any[]> {
-    return [];
-  }
+  /* ------------------------------------------------------------
+     ✅ FIXED: FETCH USER ACCESS
+  ------------------------------------------------------------ */
+  async getUserFullAccess(userId: string): Promise<any[]> {
+    const res = await this.get(Endpoint.ACCESS_MANAGEMENT);
+    const users = res?.data;
 
-  async syncUserAccess(): Promise<any> {
-    return {};
+    if (!Array.isArray(users)) return [];
+
+    const user = users.find((u: any) => u.user_id === userId);
+    return user?.access || [];
   }
 
   /* ------------------------------------------------------------
-     ✅ REALTIME DEVICE WEBSOCKET
+     ✅ FIXED: SYNC USER ACCESS
   ------------------------------------------------------------ */
-  connectDeviceWebSocket(deviceId: string, mqttTopic: string, onMessage: (data: any) => void) {
+async syncUserAccess(userId: string, access: any[]): Promise<any> {
+  return this.put(Endpoint.ACCESS_MANAGEMENT_SYNC, {
+    user_id: userId,
+    access,
+  });
+}
+
+  /* ------------------------------------------------------------
+     REALTIME DEVICE WEBSOCKET
+  ------------------------------------------------------------ */
+  connectDeviceWebSocket(
+    deviceId: string,
+    mqttTopic: string,
+    onMessage: (data: any) => void
+  ) {
     if (this.#wsChannels[deviceId]) return;
 
     const topic = mqttTopic.replace("+", deviceId);
     const url = `wss://bw06.kaatru.org/stream/${topic}`;
 
-    console.log("🔌 WS CONNECT:", deviceId, url);
-
     const ws = new WebSocket(url);
     this.#wsChannels[deviceId] = ws;
-
-    ws.onopen = () => console.log("✅ WS OPEN:", deviceId);
 
     ws.onmessage = (event) => {
       try {
@@ -171,7 +180,7 @@ class Production extends ApiService {
         const payload = json.data[0];
         const v = payload.value;
 
-        const deviceData = {
+        onMessage({
           id: deviceId,
           lat: Number(v.lat ?? 0),
           lon: Number(v.lon ?? v.long ?? 0),
@@ -180,24 +189,17 @@ class Production extends ApiService {
           temp: Number(v.temp ?? 0),
           rh: Number(v.rh ?? 0),
           srvtime: Number(payload.srvtime ?? Date.now()),
-        };
-
-        console.log("📡 LIVE", deviceData);
-        onMessage(deviceData);
+        });
       } catch (e) {
-        console.error("WS PARSE ERROR", deviceId, e);
+        console.error("WS PARSE ERROR", e);
       }
     };
 
-    ws.onerror = (e) => console.error("❌ WS ERROR", deviceId, e);
-    ws.onclose = () => {
-      console.warn("⚠️ WS CLOSED", deviceId);
-      delete this.#wsChannels[deviceId];
-    };
+    ws.onclose = () => delete this.#wsChannels[deviceId];
   }
 
   disconnectAllWebSockets() {
-    Object.values(this.#wsChannels).forEach(ws => ws.close());
+    Object.values(this.#wsChannels).forEach((ws) => ws.close());
     this.#wsChannels = {};
   }
 }
@@ -208,19 +210,37 @@ class Production extends ApiService {
 class Mock extends ApiService {
   clearToken() {}
   setKeycloakToken() {}
-  async isLoggedIn() { return true; }
-  async login() { return {}; }
+  async isLoggedIn() {
+    return true;
+  }
+  async login() {
+    return {};
+  }
 
-  async get() { return {}; }
-  async post() { return {}; }
-  async put() { return {}; }
-  async patch() { return {}; }
-  async getRamanAnalysis() { return {}; }
+  async get() {
+    return {};
+  }
+  async post() {
+    return {};
+  }
+  async put() {
+    return {};
+  }
+  async patch() {
+    return {};
+  }
+  async getRamanAnalysis() {
+    return {};
+  }
 
-  async getUserFullAccess() { return []; }
-  async syncUserAccess() { return {}; }
+  async getUserFullAccess() {
+    return [];
+  }
+  async syncUserAccess() {
+    return {};
+  }
 
-  connectDeviceWebSocket(deviceId: string, mqttTopic: string, onMessage: any) {}
+  connectDeviceWebSocket() {}
   disconnectAllWebSockets() {}
 }
 

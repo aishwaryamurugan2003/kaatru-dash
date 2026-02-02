@@ -8,6 +8,23 @@ interface Option {
   value: string;
 }
 
+const SELECT_ALL_VALUE = "__ALL__";
+
+/* ------------------------------------------------------------
+   SCROLLABLE DEVICE SELECT STYLES
+------------------------------------------------------------ */
+const deviceSelectStyles = {
+  valueContainer: (base: any) => ({
+    ...base,
+    maxHeight: "120px",   // 👈 adjust height if needed
+    overflowY: "auto",
+  }),
+  menu: (base: any) => ({
+    ...base,
+    zIndex: 9999,
+  }),
+};
+
 const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
   const [groupOptions, setGroupOptions] = useState<Option[]>([]);
   const [deviceOptions, setDeviceOptions] = useState<Option[]>([]);
@@ -54,20 +71,26 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
   };
 
   /* ------------------------------------------------------------
-      FETCH DEVICE LIST
+      FETCH DEVICE LIST (WITH SELECT ALL)
   ------------------------------------------------------------ */
-  const fetchDevices = async (groupId: string, preselected?: string[]) => {
+  const fetchDevices = async (
+    groupId: string,
+    preselected?: string[]
+  ) => {
     const res = await apiService.getRamanAnalysis(Endpoint.GROUP_DEVICES, {
       id: groupId,
     });
 
     if (res?.data?.devices) {
-      const options = res.data.devices.map((d: string) => ({
+      const devices: Option[] = res.data.devices.map((d: string) => ({
         label: d,
         value: d,
       }));
 
-      setDeviceOptions(options);
+      setDeviceOptions([
+        { label: "Select All Devices", value: SELECT_ALL_VALUE },
+        ...devices,
+      ]);
 
       if (preselected) {
         setSelectedDevice(
@@ -91,17 +114,14 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
 
     const userId = user.key;
 
-    // 1️⃣ Fetch FULL existing access (single-user source)
     const existingAccess = await apiService.getUserFullAccess(userId);
 
-    // 2️⃣ Build updated group entry
     const updatedEntry = {
       group_id: selectedGroup.value,
       group_name: selectedGroup.label,
       devices: selectedDevice.map((d) => d.value),
     };
 
-    // 3️⃣ Merge safely (replace only same group)
     const mergedAccess = [
       ...existingAccess.filter(
         (a) => a.group_id !== updatedEntry.group_id
@@ -109,22 +129,11 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
       updatedEntry,
     ];
 
-    // 🔒 Safety guard
     if (mergedAccess.length < existingAccess.length) {
       alert("Unsafe update blocked (possible data loss)");
       return;
     }
 
-    console.log(
-      "FINAL EDIT SYNC PAYLOAD:",
-      JSON.stringify(
-        { user_id: userId, access: mergedAccess },
-        null,
-        2
-      )
-    );
-
-    // 4️⃣ Sync using centralized helper
     await apiService.syncUserAccess(userId, mergedAccess);
 
     onUpdated();
@@ -161,8 +170,24 @@ const EditPermissionModal = ({ isOpen, onClose, user, onUpdated }) => {
           isMulti
           options={deviceOptions}
           value={selectedDevice}
-          onChange={(v) => setSelectedDevice(v as Option[])}
+          styles={deviceSelectStyles}   
           className="mb-4"
+          onChange={(selected) => {
+            const values = selected as Option[];
+
+            const hasSelectAll = values.some(
+              (v) => v.value === SELECT_ALL_VALUE
+            );
+
+            if (hasSelectAll) {
+              const allDevices = deviceOptions.filter(
+                (d) => d.value !== SELECT_ALL_VALUE
+              );
+              setSelectedDevice(allDevices);
+            } else {
+              setSelectedDevice(values);
+            }
+          }}
         />
 
         <div className="flex justify-end gap-3">
