@@ -3,7 +3,7 @@ import { apiService, Endpoint } from "../services/api";
 import { useRealtimeDevices } from "../hooks/useRealtimeDevices";
 import RealtimeChart from "../components/RealtimeChart";
 import RealtimeMapAll from "@/components/RealtimeMapAll";
-import Loading from "../components/Loading"; // ✅ IMPORT LOADING
+import Loading from "../components/Loading";
 
 const RealtimeDashboardPage: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
@@ -11,12 +11,12 @@ const RealtimeDashboardPage: React.FC = () => {
   const [groupDevices, setGroupDevices] = useState<string[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true); // ✅ LOADING STATE
+  const [loading, setLoading] = useState(true);
 
-  // LIVE DEVICE DATA (WEBSOCKET / POLLING)
+  // LIVE DEVICE DATA
   const devices = useRealtimeDevices(selectedGroup, selectedDevices);
 
-  /* ✅ ACTIVE DEVICE IDS (STABLE ORDER) */
+  /* ACTIVE DEVICE IDS (STABLE ORDER) */
   const activeDeviceIds = useMemo(() => {
     return Object.keys(devices).sort();
   }, [devices]);
@@ -60,7 +60,7 @@ const RealtimeDashboardPage: React.FC = () => {
         const devices = res.data.devices || [];
         setGroupDevices(devices);
 
-        // ✅ Auto select ALL devices
+        // Auto-select all devices
         setSelectedDevices(devices);
         setCurrentIndex(0);
       } catch (err) {
@@ -80,10 +80,9 @@ const RealtimeDashboardPage: React.FC = () => {
     if (activeDeviceIds.length === 0) return;
 
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => {
-        const next = prev + 1;
-        return next >= activeDeviceIds.length ? 0 : next;
-      });
+      setCurrentIndex((prev) =>
+        prev + 1 >= activeDeviceIds.length ? 0 : prev + 1
+      );
     }, 5000);
 
     return () => clearInterval(interval);
@@ -164,6 +163,7 @@ const RealtimeDashboardPage: React.FC = () => {
           <h2 className="font-semibold mb-2">Live Map</h2>
           <div className="h-[400px] rounded overflow-hidden">
             <RealtimeMapAll
+              key={selectedGroup} 
               devices={devices}
               activeId={currentDeviceId}
             />
@@ -180,27 +180,14 @@ const RealtimeDashboardPage: React.FC = () => {
             <SensorCard label="Temp" value={device?.temp ?? "--"} />
             <SensorCard label="Humidity" value={device?.rh ?? "--"} />
 
-            {device?.nh3_ppm && (
-              <SensorCard label="NH3" value={device.nh3_ppm} />
-            )}
-            {device?.co_ppb && (
-              <SensorCard label="CO" value={device.co_ppb} />
-            )}
-            {device?.so2_ppb && (
-              <SensorCard label="SO2" value={device.so2_ppb} />
-            )}
-            {device?.no2_ppb && (
-              <SensorCard label="NO2" value={device.no2_ppb} />
-            )}
+            {device?.nh3_ppm && <SensorCard label="NH3" value={device.nh3_ppm} />}
+            {device?.co_ppb && <SensorCard label="CO" value={device.co_ppb} />}
+            {device?.so2_ppb && <SensorCard label="SO2" value={device.so2_ppb} />}
+            {device?.no2_ppb && <SensorCard label="NO2" value={device.no2_ppb} />}
             {device?.o3_ppb_compensated && (
-              <SensorCard
-                label="O3"
-                value={device.o3_ppb_compensated}
-              />
+              <SensorCard label="O3" value={device.o3_ppb_compensated} />
             )}
-            {device?.k30Co2 && (
-              <SensorCard label="CO2" value={device.k30Co2} />
-            )}
+            {device?.k30Co2 && <SensorCard label="CO2" value={device.k30Co2} />}
           </div>
 
           {/* LIVE CHART */}
