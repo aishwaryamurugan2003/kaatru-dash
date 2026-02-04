@@ -1,7 +1,10 @@
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
-import L from "leaflet";
+import * as L from "leaflet";
 import { useEffect } from "react";
 
+/* ---------------------------------------------
+   MARKER ICONS
+--------------------------------------------- */
 const normalIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
@@ -11,8 +14,10 @@ const activeIcon = new L.Icon({
   iconUrl: "https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png",
 });
 
-/* 🔥 AUTO FIT MAP TO ALL DEVICES */
-function FitBounds({ devices }: any) {
+/* ---------------------------------------------
+   AUTO FIT MAP TO ALL DEVICES
+--------------------------------------------- */
+function FitBounds({ devices }: { devices: any }) {
   const map = useMap();
 
   useEffect(() => {
@@ -33,8 +38,21 @@ function FitBounds({ devices }: any) {
   return null;
 }
 
-export default function RealtimeMapAll({ devices, activeId }: any) {
-  const deviceList = Object.values(devices) as any[];
+/* ---------------------------------------------
+   MAIN MAP COMPONENT
+--------------------------------------------- */
+interface Props {
+  devices: Record<string, any>;
+  activeId?: string | null;
+  onMarkerClick?: (id: string) => void;
+}
+
+export default function RealtimeMapAll({
+  devices,
+  activeId,
+  onMarkerClick,
+}: Props) {
+  const deviceList = Object.values(devices);
 
   if (deviceList.length === 0) {
     return (
@@ -55,15 +73,22 @@ export default function RealtimeMapAll({ devices, activeId }: any) {
       {/* ✅ Auto zoom to show ALL devices */}
       <FitBounds devices={devices} />
 
-      {deviceList.map((d) => (
-        <Marker
-          key={d.id}
-          position={[d.lat, d.lon]}
-          icon={d.id === activeId ? activeIcon : normalIcon}
-        >
-          <Popup>{d.id}</Popup>
-        </Marker>
-      ))}
+      {deviceList.map((d: any) => {
+        if (!d?.lat || !d?.lon) return null;
+
+        return (
+          <Marker
+            key={d.id}
+            position={[d.lat, d.lon]}
+            icon={d.id === activeId ? activeIcon : normalIcon}
+            eventHandlers={{
+              click: () => onMarkerClick?.(d.id),
+            }}
+          >
+            <Popup>{d.id}</Popup>
+          </Marker>
+        );
+      })}
     </MapContainer>
   );
 }

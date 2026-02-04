@@ -12,6 +12,9 @@ export const Endpoint = {
   GROUP_DEVICES: "https://bw04.kaatru.org/group",
   ACCESS_MANAGEMENT: "https://caas.kaatru.org/admin/access-management",
   ACCESS_MANAGEMENT_SYNC: "https://caas.kaatru.org/admin/access-management/sync",
+
+  // ✅ NEW
+  SENSOR_HISTORY: "https://bw06.kaatru.org/stale/filter",
 } as const;
 
 /* ------------------------------------------------------------
@@ -37,13 +40,19 @@ abstract class ApiService {
   abstract clearToken(): void;
 
   abstract get(endpoint: string, payload?: Record<string, any>): Promise<any>;
-  abstract post(endpoint: string, payload: any, params?: Record<string, any>): Promise<any>;
-  abstract put(endpoint: string, payload: any, params?: Record<string, any>): Promise<any>;
+  abstract post(endpoint: string, payload: any): Promise<any>;
+  abstract put(endpoint: string, payload: any): Promise<any>;
   abstract patch(endpoint: string, payload: any): Promise<any>;
   abstract getRamanAnalysis(endpoint: string, payload?: Record<string, any>): Promise<any>;
 
   abstract getUserFullAccess(userId: string): Promise<any[]>;
   abstract syncUserAccess(userId: string, access: any[]): Promise<any>;
+
+  // ✅ NEW
+  abstract fetchSensorHistory(
+    deviceId: string,
+    filter: string
+  ): Promise<any>;
 
   abstract connectDeviceWebSocket(
     deviceId: string,
@@ -134,7 +143,24 @@ class Production extends ApiService {
   }
 
   /* ------------------------------------------------------------
-     ✅ FIXED: FETCH USER ACCESS
+     ✅ SENSOR HISTORY API (YOUR REQUEST)
+  ------------------------------------------------------------ */
+  async fetchSensorHistory(deviceId: string, filter: string) {
+    const encodedId = encodeURIComponent(deviceId);
+
+    const res = await axios.get(Endpoint.SENSOR_HISTORY, {
+      params: {
+        devices: encodedId,
+        filter,
+      },
+      headers: this.#getHeaders(),
+    });
+
+    return res.data;
+  }
+
+  /* ------------------------------------------------------------
+     FETCH USER ACCESS
   ------------------------------------------------------------ */
   async getUserFullAccess(userId: string): Promise<any[]> {
     const res = await this.get(Endpoint.ACCESS_MANAGEMENT);
@@ -146,15 +172,12 @@ class Production extends ApiService {
     return user?.access || [];
   }
 
-  /* ------------------------------------------------------------
-     ✅ FIXED: SYNC USER ACCESS
-  ------------------------------------------------------------ */
-async syncUserAccess(userId: string, access: any[]): Promise<any> {
-  return this.put(Endpoint.ACCESS_MANAGEMENT_SYNC, {
-    user_id: userId,
-    access,
-  });
-}
+  async syncUserAccess(userId: string, access: any[]): Promise<any> {
+    return this.put(Endpoint.ACCESS_MANAGEMENT_SYNC, {
+      user_id: userId,
+      access,
+    });
+  }
 
   /* ------------------------------------------------------------
      REALTIME DEVICE WEBSOCKET
@@ -230,6 +253,10 @@ class Mock extends ApiService {
     return {};
   }
   async getRamanAnalysis() {
+    return {};
+  }
+
+  async fetchSensorHistory() {
     return {};
   }
 

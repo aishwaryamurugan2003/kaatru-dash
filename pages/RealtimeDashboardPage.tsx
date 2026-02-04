@@ -1,28 +1,93 @@
-import React, { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { apiService, Endpoint } from "../services/api";
 import { useRealtimeDevices } from "../hooks/useRealtimeDevices";
-import RealtimeChart from "../components/RealtimeChart";
 import RealtimeMapAll from "@/components/RealtimeMapAll";
 import Loading from "../components/Loading";
+import SensorHistoryChart from "@/components/SensorHistoryChart";
+
+/* ---------------------------------------------
+   UTILS
+--------------------------------------------- */
+function calculateAverages(devices: Record<string, any>) {
+  const list = Object.values(devices);
+
+  const avg = (key: string) => {
+    const vals = list
+      .map((d: any) => d?.[key])
+      .filter((v) => typeof v === "number");
+    if (!vals.length) return "--";
+    return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+  };
+
+  return {
+    pm25: avg("sPM2"),
+    pm10: avg("sPM10"),
+    temp: avg("temp"),
+    humidity: avg("rh"),
+  };
+}
 
 const RealtimeDashboardPage: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState("");
   const [groupDevices, setGroupDevices] = useState<string[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // LIVE DEVICE DATA
+  /* 🔥 NEW STATES */
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [autoRotate, setAutoRotate] = useState(true);
+  const [flipped, setFlipped] = useState(false);
+
+  /* LIVE DEVICE DATA */
   const devices = useRealtimeDevices(selectedGroup, selectedDevices);
 
-  /* ACTIVE DEVICE IDS (STABLE ORDER) */
-  const activeDeviceIds = useMemo(() => {
-    return Object.keys(devices).sort();
-  }, [devices]);
+  /* STABLE DEVICE ORDER */
+  const activeDeviceIds = useMemo(
+    () => Object.keys(devices).sort(),
+    [devices]
+  );
 
-  const currentDeviceId = activeDeviceIds[currentIndex];
-  const device = devices[currentDeviceId];
+  /* AUTO-ROTATE DEVICE */
+  useEffect(() => {
+    if (!autoRotate || activeDeviceIds.length === 0) return;
+
+    const interval = setInterval(() => {
+      setActiveDeviceId((prev) => {
+        const idx = prev
+          ? activeDeviceIds.indexOf(prev)
+          : 0;
+        return activeDeviceIds[(idx + 1) % activeDeviceIds.length];
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [autoRotate, activeDeviceIds]);
+
+  /* SAFETY RESET */
+  useEffect(() => {
+    if (
+      activeDeviceId &&
+      !activeDeviceIds.includes(activeDeviceId)
+    ) {
+      setActiveDeviceId(activeDeviceIds[0] ?? null);
+    }
+  }, [activeDeviceIds, activeDeviceId]);
+
+  /* DEVICE IN FOCUS */
+  const focusedDeviceId =
+    selectedDeviceId ?? activeDeviceId ?? activeDeviceIds[0];
+
+  const focusedDevice = focusedDeviceId
+    ? devices[focusedDeviceId]
+    : null;
+
+  /* AGGREGATE VALUES */
+  const aggregate = useMemo(
+    () => calculateAverages(devices),
+    [devices]
+  );
 
   /* ------------------------------------------------------------
       FETCH GROUPS
@@ -39,7 +104,6 @@ const RealtimeDashboardPage: React.FC = () => {
         setLoading(false);
       }
     };
-
     fetchGroups();
   }, []);
 
@@ -57,43 +121,21 @@ const RealtimeDashboardPage: React.FC = () => {
           { id: selectedGroup }
         );
 
-        const devices = res.data.devices || [];
-        setGroupDevices(devices);
-
-        // Auto-select all devices
-        setSelectedDevices(devices);
-        setCurrentIndex(0);
+        const devs = res.data.devices || [];
+        setGroupDevices(devs);
+        setSelectedDevices(devs);
+        setActiveDeviceId(devs[0] ?? null);
+        setSelectedDeviceId(null);
+        setAutoRotate(true);
+        setFlipped(false);
       } catch (err) {
         console.error("Failed to load group devices", err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchDevices();
   }, [selectedGroup]);
-
-  /* ------------------------------------------------------------
-      ROTATE DEVICE EVERY 5 SECONDS
-  ------------------------------------------------------------ */
-  useEffect(() => {
-    if (activeDeviceIds.length === 0) return;
-
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) =>
-        prev + 1 >= activeDeviceIds.length ? 0 : prev + 1
-      );
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [activeDeviceIds.length]);
-
-  /* SAFETY RESET */
-  useEffect(() => {
-    if (currentIndex >= activeDeviceIds.length) {
-      setCurrentIndex(0);
-    }
-  }, [activeDeviceIds, currentIndex]);
 
   function toggleDevice(id: string) {
     setSelectedDevices((prev) =>
@@ -103,9 +145,6 @@ const RealtimeDashboardPage: React.FC = () => {
     );
   }
 
-  /* ------------------------------------------------------------
-      LOADING SCREEN
-  ------------------------------------------------------------ */
   if (loading) {
     return <Loading fullScreen text="Loading realtime dashboard..." />;
   }
@@ -145,16 +184,6 @@ const RealtimeDashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* DEBUG INFO */}
-      <div className="flex gap-6 text-sm font-bold">
-        <div className="text-green-600">
-          Active Devices: {activeDeviceIds.length}
-        </div>
-        <div className="text-blue-600">
-          Showing Device: {currentDeviceId || "--"}
-        </div>
-      </div>
-
       {/* MAIN GRID */}
       <div className="flex gap-4">
 
@@ -163,42 +192,54 @@ const RealtimeDashboardPage: React.FC = () => {
           <h2 className="font-semibold mb-2">Live Map</h2>
           <div className="h-[400px] rounded overflow-hidden">
             <RealtimeMapAll
-              key={selectedGroup} 
               devices={devices}
-              activeId={currentDeviceId}
+              activeId={focusedDeviceId}
+              onMarkerClick={(id: string) => {
+                setSelectedDeviceId(id);
+                setAutoRotate(false);
+                setFlipped(true);
+              }}
             />
           </div>
         </div>
 
         {/* RIGHT PANEL */}
         <div className="w-[450px] flex flex-col gap-4">
+          {!flipped ? (
+  /* -------- AGGREGATE -------- */
+  <div className="grid grid-cols-2 gap-3">
+    <SensorCard label="PM2.5 (Avg)" value={aggregate.pm25} />
+    <SensorCard label="PM10 (Avg)" value={aggregate.pm10} />
+    <SensorCard label="Temp (Avg)" value={aggregate.temp} />
+    <SensorCard label="Humidity (Avg)" value={aggregate.humidity} />
 
-          {/* SENSOR CARDS */}
-          <div className="grid grid-cols-2 gap-3">
-            <SensorCard label="PM2.5" value={device?.sPM2 ?? "--"} />
-            <SensorCard label="PM10" value={device?.sPM10 ?? "--"} />
-            <SensorCard label="Temp" value={device?.temp ?? "--"} />
-            <SensorCard label="Humidity" value={device?.rh ?? "--"} />
+    <SensorCard label="PM2.5" value={focusedDevice?.sPM2 ?? "--"} />
+    <SensorCard label="PM10" value={focusedDevice?.sPM10 ?? "--"} />
+    <SensorCard label="Temp" value={focusedDevice?.temp ?? "--"} />
+    <SensorCard label="Humidity" value={focusedDevice?.rh ?? "--"} />
+  </div>
+) : (
+  /* -------- CHART -------- */
+  <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-3 h-[350px]">
+    <div className="flex justify-between mb-2">
+      <h2 className="font-semibold">
+        Device History ({focusedDeviceId})
+      </h2>
+      <button
+        className="text-blue-600 text-sm"
+        onClick={() => {
+          setFlipped(false);
+          setSelectedDeviceId(null);
+          setAutoRotate(true);
+        }}
+      >
+        Back
+      </button>
+    </div>
 
-            {device?.nh3_ppm && <SensorCard label="NH3" value={device.nh3_ppm} />}
-            {device?.co_ppb && <SensorCard label="CO" value={device.co_ppb} />}
-            {device?.so2_ppb && <SensorCard label="SO2" value={device.so2_ppb} />}
-            {device?.no2_ppb && <SensorCard label="NO2" value={device.no2_ppb} />}
-            {device?.o3_ppb_compensated && (
-              <SensorCard label="O3" value={device.o3_ppb_compensated} />
-            )}
-            {device?.k30Co2 && <SensorCard label="CO2" value={device.k30Co2} />}
-          </div>
-
-          {/* LIVE CHART */}
-          <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow p-3">
-            <h2 className="font-semibold mb-2">
-              Last 5 Minutes (PM2.5)
-            </h2>
-            <div className="h-[250px]">
-              <RealtimeChart value={Number(device?.sPM2)} />
-            </div>
-          </div>
+    <SensorHistoryChart deviceId={focusedDeviceId} />
+  </div>
+)}
 
         </div>
       </div>
