@@ -113,7 +113,6 @@ const fetchUsers = async () => {
   return <Loading fullScreen text="Loading device management..." />;
 }
 
-
   /* ------------------------------------------------------------
      UI
   ------------------------------------------------------------ */
