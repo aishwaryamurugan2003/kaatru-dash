@@ -15,25 +15,27 @@ const activeIcon = new L.Icon({
 });
 
 /* ---------------------------------------------
-   AUTO FIT MAP TO ALL DEVICES
+   AUTO FLY TO ACTIVE DEVICE
 --------------------------------------------- */
-function FitBounds({ devices }: { devices: any }) {
+function FlyToActive({
+  devices,
+  activeId,
+}: {
+  devices: Record<string, any>;
+  activeId?: string | null;
+}) {
   const map = useMap();
 
   useEffect(() => {
-    const points = Object.values(devices)
-      .filter((d: any) => d?.lat && d?.lon)
-      .map((d: any) => [d.lat, d.lon] as [number, number]);
+    if (!activeId) return;
 
-    if (points.length === 0) return;
+    const device = devices[activeId];
+    if (!device?.lat || !device?.lon) return;
 
-    const bounds = L.latLngBounds(points);
-
-    map.fitBounds(bounds, {
-      padding: [50, 50],
-      animate: true,
+    map.flyTo([device.lat, device.lon], 15, {
+      duration: 2,
     });
-  }, [devices, map]);
+  }, [activeId, devices, map]);
 
   return null;
 }
@@ -64,14 +66,14 @@ export default function RealtimeMapAll({
 
   return (
     <MapContainer
-      center={[20, 78]} // fallback only
+      center={[20, 78]}
       zoom={5}
       style={{ height: "100%", width: "100%" }}
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-      {/* ✅ Auto zoom to show ALL devices */}
-      <FitBounds devices={devices} />
+      {/* AUTO DEVICE MOVEMENT */}
+      <FlyToActive devices={devices} activeId={activeId} />
 
       {deviceList.map((d: any) => {
         if (!d?.lat || !d?.lon) return null;

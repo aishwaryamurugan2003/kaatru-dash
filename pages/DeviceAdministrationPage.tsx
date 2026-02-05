@@ -5,35 +5,44 @@ import { apiService } from "../services/api";
 import { Endpoint } from "../services/api";
 import AddPermissionModal from "../components/AddPermissionModal";
 import EditPermissionModal from "../components/EditPermissionModal";
+import Loading from "../components/Loading";
 
 const DeviceAdministrationPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [searchText, setSearchText] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const fetchUsers = async () => {
-    try {
-      const res = await apiService.get(Endpoint.ACCESS_MANAGEMENT);
-      const data = res?.data;
 
-      if (Array.isArray(data)) {
-        const normalized = data.map((u, index) => ({
-          key: u.user_id,
-          sno: index + 1,
-          username: u.username,
-          email: u.email,
-          groups: u.access?.map((g) => g.group_name).join(", "),
-          access: u.access,
-        }));
+const fetchUsers = async () => {
+  try {
+    setLoading(true);
+    const res = await apiService.get(Endpoint.ACCESS_MANAGEMENT);
+    const data = res?.data;
 
-        setUsers(normalized);
-      }
-    } catch (error) {
-      console.log("ACCESS MGMT ERROR:", error);
+    if (Array.isArray(data)) {
+      const normalized = data.map((u, index) => ({
+        key: u.user_id,
+        sno: index + 1,
+        username: u.username,
+        email: u.email,
+        groups: u.access?.map((g) => g.group_name).join(", "),
+        access: u.access,
+      }));
+
+      setUsers(normalized);
+    } else {
       setUsers([]);
     }
-  };
+  } catch (error) {
+    console.log("ACCESS MGMT ERROR:", error);
+    setUsers([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     fetchUsers();
@@ -100,6 +109,10 @@ const DeviceAdministrationPage: React.FC = () => {
       </div>
     );
   };
+  if (loading) {
+  return <Loading fullScreen text="Loading device management..." />;
+}
+
 
   /* ------------------------------------------------------------
      UI

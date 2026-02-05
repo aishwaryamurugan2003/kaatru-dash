@@ -4,6 +4,14 @@ import { useRealtimeDevices } from "../hooks/useRealtimeDevices";
 import RealtimeMapAll from "@/components/RealtimeMapAll";
 import Loading from "../components/Loading";
 import SensorHistoryChart from "@/components/SensorHistoryChart";
+import ReactCardFlip from "react-card-flip";
+import Select from "react-select";
+
+
+interface Option {
+  label: string;
+  value: string;
+}
 
 /* ---------------------------------------------
    UTILS
@@ -34,7 +42,7 @@ const RealtimeDashboardPage: React.FC = () => {
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  /* 🔥 NEW STATES */
+  /* STATES */
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [autoRotate, setAutoRotate] = useState(true);
@@ -43,11 +51,37 @@ const RealtimeDashboardPage: React.FC = () => {
   /* LIVE DEVICE DATA */
   const devices = useRealtimeDevices(selectedGroup, selectedDevices);
 
+  const filteredDevices = useMemo(() => {
+  const result: Record<string, any> = {};
+  selectedDevices.forEach((id) => {
+    if (devices[id]) {
+      result[id] = devices[id];
+    }
+  });
+  return result;
+}, [devices, selectedDevices]);
+
+const isRealtimeLoading =
+  selectedGroup &&
+  selectedDevices.length > 0 &&
+  Object.keys(filteredDevices).length === 0;
+
+
+
   /* STABLE DEVICE ORDER */
-  const activeDeviceIds = useMemo(
-    () => Object.keys(devices).sort(),
-    [devices]
-  );
+const activeDeviceIds = useMemo(
+  () => Object.keys(filteredDevices).sort(),
+  [filteredDevices]
+);
+
+
+  /* RESET FOCUS WHEN GROUP CHANGES */
+  useEffect(() => {
+    setSelectedDeviceId(null);
+    setActiveDeviceId(null);
+    setFlipped(false);
+    setAutoRotate(true);
+  }, [selectedGroup]);
 
   /* AUTO-ROTATE DEVICE */
   useEffect(() => {
@@ -75,17 +109,26 @@ const RealtimeDashboardPage: React.FC = () => {
     }
   }, [activeDeviceIds, activeDeviceId]);
 
-  /* DEVICE IN FOCUS */
-  const focusedDeviceId =
-    selectedDeviceId ?? activeDeviceId ?? activeDeviceIds[0];
+  /* SAFE DEVICE FOCUS LOGIC */
+  const focusedDeviceId = useMemo(() => {
+    if (selectedDeviceId && devices[selectedDeviceId]) {
+      return selectedDeviceId;
+    }
+
+    if (activeDeviceId && devices[activeDeviceId]) {
+      return activeDeviceId;
+    }
+
+    return activeDeviceIds[0] ?? null;
+  }, [selectedDeviceId, activeDeviceId, activeDeviceIds, devices]);
 
   const focusedDevice = focusedDeviceId
-    ? devices[focusedDeviceId]
+    ? filteredDevices[focusedDeviceId]
     : null;
 
   /* AGGREGATE VALUES */
   const aggregate = useMemo(
-    () => calculateAverages(devices),
+    () => calculateAverages(filteredDevices),
     [devices]
   );
 
@@ -145,54 +188,77 @@ const RealtimeDashboardPage: React.FC = () => {
     );
   }
 
-  if (loading) {
-    return <Loading fullScreen text="Loading realtime dashboard..." />;
-  }
+if (loading || isRealtimeLoading) {
+  return <Loading fullScreen text="Loading realtime dashboard..." />;
+}
+
 
   return (
     <div className="p-6 space-y-4 bg-gray-50 dark:bg-gray-900">
 
       {/* TOP FILTER BAR */}
       <div className="flex items-center gap-4 bg-white dark:bg-gray-800 p-3 rounded-xl shadow">
-        <select
-          className="border p-2 rounded"
-          value={selectedGroup}
-          onChange={(e) => setSelectedGroup(e.target.value)}
-        >
-          <option value="">Select Group</option>
-          {groups.map((g: any) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+<Select
+  options={groups.map((g: any) => ({
+    label: g.name,
+    value: g.id,
+  }))}
+  value={
+    groups
+      .map((g: any) => ({
+        label: g.name,
+        value: g.id,
+      }))
+      .find((g) => g.value === selectedGroup) || null
+  }
+  onChange={(opt) =>
+    setSelectedGroup((opt as Option)?.value || "")
+  }
+  placeholder="Select Group"
+  className="w-64"
+/>
 
-        <div className="flex gap-2 flex-wrap">
-          {groupDevices.map((id) => (
-            <button
-              key={id}
-              onClick={() => toggleDevice(id)}
-              className={`px-3 py-1 rounded ${
-                selectedDevices.includes(id)
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200"
-              }`}
-            >
-              {id}
-            </button>
-          ))}
-        </div>
+
+<Select
+  isMulti
+  options={groupDevices.map((id) => ({
+    label: id,
+    value: id,
+  }))}
+  value={selectedDevices.map((id) => ({
+    label: id,
+    value: id,
+  }))}
+  onChange={(opts) =>
+    setSelectedDevices(
+      (opts as Option[]).map((o) => o.value)
+    )
+  }
+  placeholder="Select Devices"
+  className="w-full min-w-[400px]"
+  styles={{
+    valueContainer: (base) => ({
+      ...base,
+      maxHeight: "120px",
+      overflowY: "auto",
+    }),
+    menu: (base) => ({
+      ...base,
+      zIndex: 9999,
+    }),
+  }}
+/>
       </div>
 
       {/* MAIN GRID */}
-      <div className="flex gap-4">
+      <div className="grid grid-cols-[3fr_2fr] gap-4">
 
         {/* LIVE MAP */}
-        <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl shadow p-2">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4">
           <h2 className="font-semibold mb-2">Live Map</h2>
           <div className="h-[400px] rounded overflow-hidden">
             <RealtimeMapAll
-              devices={devices}
+            devices={filteredDevices}
               activeId={focusedDeviceId}
               onMarkerClick={(id: string) => {
                 setSelectedDeviceId(id);
@@ -203,45 +269,93 @@ const RealtimeDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
-        <div className="w-[450px] flex flex-col gap-4">
-          {!flipped ? (
-  /* -------- AGGREGATE -------- */
-  <div className="grid grid-cols-2 gap-3">
-    <SensorCard label="PM2.5 (Avg)" value={aggregate.pm25} />
-    <SensorCard label="PM10 (Avg)" value={aggregate.pm10} />
-    <SensorCard label="Temp (Avg)" value={aggregate.temp} />
-    <SensorCard label="Humidity (Avg)" value={aggregate.humidity} />
+        <div className="flex flex-col gap-6">
+  <ReactCardFlip isFlipped={flipped} flipDirection="horizontal">
 
-    <SensorCard label="PM2.5" value={focusedDevice?.sPM2 ?? "--"} />
-    <SensorCard label="PM10" value={focusedDevice?.sPM10 ?? "--"} />
-    <SensorCard label="Temp" value={focusedDevice?.temp ?? "--"} />
-    <SensorCard label="Humidity" value={focusedDevice?.rh ?? "--"} />
-  </div>
-) : (
-  /* -------- CHART -------- */
-  <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-3 h-[350px]">
-    <div className="flex justify-between mb-2">
-      <h2 className="font-semibold">
-        Device History ({focusedDeviceId})
-      </h2>
-      <button
-        className="text-blue-600 text-sm"
-        onClick={() => {
-          setFlipped(false);
-          setSelectedDeviceId(null);
-          setAutoRotate(true);
-        }}
-      >
-        Back
-      </button>
+    {/* ---------------- FRONT SIDE (CARDS) ---------------- */}
+    <div className="space-y-6">
+
+      {/* AGGREGATE */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3 text-center">
+          AGGREGATE
+        </h2>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl shadow p-8 flex items-center justify-center text-center">
+            <div>
+              <div className="text-gray-500 text-xl">PM 2.5</div>
+              <div className="text-5xl font-bold">
+                {aggregate.pm25}
+                <span className="text-base font-normal ml-1">µg/m³</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <SensorCard label="Temperature" value={aggregate.temp} unit="°C" />
+            <SensorCard label="Humidity" value={aggregate.humidity} unit="%" />
+            <SensorCard label="PM 1" value={aggregate.pm25} unit="µg/m³" />
+            <SensorCard label="PM 10" value={aggregate.pm10} unit="µg/m³" />
+          </div>
+        </div>
+      </div>
+
+      {/* DEVICE */}
+      <div>
+        <h2 className="text-lg font-semibold text-center mb-3">
+          {focusedDeviceId || "Device"}
+        </h2>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <SensorCard label="PM 1" value={focusedDevice?.sPM2 ?? "--"} unit="µg/m³" />
+            <SensorCard label="PM 10" value={focusedDevice?.sPM10 ?? "--"} unit="µg/m³" />
+            <SensorCard label="Temperature" value={focusedDevice?.temp ?? "--"} unit="°C" />
+            <SensorCard label="Humidity" value={focusedDevice?.rh ?? "--"} unit="%" />
+          </div>
+
+          <div className="bg-white rounded-xl shadow p-8 flex items-center justify-center text-center">
+            <div>
+              <div className="text-gray-500 text-xl">PM 2.5</div>
+              <div className="text-5xl font-bold">
+                {focusedDevice?.sPM2 ?? "--"}
+                <span className="text-base font-normal ml-1">µg/m³</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
-    <SensorHistoryChart deviceId={focusedDeviceId} />
-  </div>
-)}
+    {/* ---------------- BACK SIDE (CHART) ---------------- */}
+    <div className="bg-white rounded-xl shadow p-3 h-[420px]">
+      <div className="flex justify-between mb-2">
+        <h2 className="font-semibold">
+          Device History ({focusedDeviceId})
+        </h2>
+        <button
+          className="text-blue-600 text-sm"
+          onClick={() => {
+            setFlipped(false);
+            setSelectedDeviceId(null);
+            setAutoRotate(true);
+          }}
+        >
+          Back
+        </button>
+      </div>
 
-        </div>
+      <SensorHistoryChart deviceId={focusedDeviceId} />
+    </div>
+
+  </ReactCardFlip>
+</div>
+
+
+
+
       </div>
     </div>
   );
@@ -250,13 +364,18 @@ const RealtimeDashboardPage: React.FC = () => {
 const SensorCard = ({
   label,
   value,
+  unit,
 }: {
   label: string;
   value: string | number;
+  unit?: string;
 }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+  <div className="bg-white rounded-xl shadow p-4 text-center">
     <div className="text-sm text-gray-500">{label}</div>
-    <div className="text-xl font-bold">{value}</div>
+    <div className="text-2xl font-bold">
+      {value}
+      {unit && <span className="text-sm font-normal ml-1">{unit}</span>}
+    </div>
   </div>
 );
 
