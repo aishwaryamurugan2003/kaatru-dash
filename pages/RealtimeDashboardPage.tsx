@@ -6,51 +6,47 @@ import Loading from "../components/Loading";
 import SensorHistoryChart from "@/components/SensorHistoryChart";
 import ReactCardFlip from "react-card-flip";
 import Select from "react-select";
-
-
 interface Option {
   label: string;
   value: string;
 }
-
-/* ---------------------------------------------
-   UTILS
---------------------------------------------- */
 function calculateAverages(devices: Record<string, any>) {
   const list = Object.values(devices);
 
-  const avg = (key: string) => {
+  const avg = (key: string, isPM = false) => {
     const vals = list
       .map((d: any) => d?.[key])
-      .filter((v) => typeof v === "number");
+      .filter((v) => {
+        if (typeof v !== "number") return false;
+        if (isPM) {
+          return v >= 0 && v <= 2000;
+        }
+
+        return true;
+      });
+
     if (!vals.length) return "--";
     return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
   };
-
   return {
-    pm25: avg("sPM2"),
-    pm10: avg("sPM10"),
+    pm25: avg("sPM2", true),
+    pm10: avg("sPM10", true),
     temp: avg("temp"),
     humidity: avg("rh"),
   };
 }
-
 const RealtimeDashboardPage: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState("");
   const [groupDevices, setGroupDevices] = useState<string[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-
-  /* STATES */
+  const [realtimeTimeout, setRealtimeTimeout] = useState(false);
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [autoRotate, setAutoRotate] = useState(true);
   const [flipped, setFlipped] = useState(false);
-
-  /* LIVE DEVICE DATA */
   const devices = useRealtimeDevices(selectedGroup, selectedDevices);
-
   const filteredDevices = useMemo(() => {
   const result: Record<string, any> = {};
   selectedDevices.forEach((id) => {
@@ -60,30 +56,20 @@ const RealtimeDashboardPage: React.FC = () => {
   });
   return result;
 }, [devices, selectedDevices]);
-
 const isRealtimeLoading =
   selectedGroup &&
   selectedDevices.length > 0 &&
   Object.keys(filteredDevices).length === 0;
-
-
-
-  /* STABLE DEVICE ORDER */
 const activeDeviceIds = useMemo(
   () => Object.keys(filteredDevices).sort(),
   [filteredDevices]
 );
-
-
-  /* RESET FOCUS WHEN GROUP CHANGES */
   useEffect(() => {
     setSelectedDeviceId(null);
     setActiveDeviceId(null);
     setFlipped(false);
     setAutoRotate(true);
   }, [selectedGroup]);
-
-  /* AUTO-ROTATE DEVICE */
   useEffect(() => {
     if (!autoRotate || activeDeviceIds.length === 0) return;
 
@@ -98,8 +84,6 @@ const activeDeviceIds = useMemo(
 
     return () => clearInterval(interval);
   }, [autoRotate, activeDeviceIds]);
-
-  /* SAFETY RESET */
   useEffect(() => {
     if (
       activeDeviceId &&
@@ -108,8 +92,6 @@ const activeDeviceIds = useMemo(
       setActiveDeviceId(activeDeviceIds[0] ?? null);
     }
   }, [activeDeviceIds, activeDeviceId]);
-
-  /* SAFE DEVICE FOCUS LOGIC */
   const focusedDeviceId = useMemo(() => {
     if (selectedDeviceId && devices[selectedDeviceId]) {
       return selectedDeviceId;
@@ -125,16 +107,10 @@ const activeDeviceIds = useMemo(
   const focusedDevice = focusedDeviceId
     ? filteredDevices[focusedDeviceId]
     : null;
-
-  /* AGGREGATE VALUES */
   const aggregate = useMemo(
     () => calculateAverages(filteredDevices),
     [devices]
   );
-
-  /* ------------------------------------------------------------
-      FETCH GROUPS
-  ------------------------------------------------------------ */
   useEffect(() => {
     const fetchGroups = async () => {
       try {
@@ -150,9 +126,19 @@ const activeDeviceIds = useMemo(
     fetchGroups();
   }, []);
 
-  /* ------------------------------------------------------------
-      FETCH DEVICES WHEN GROUP SELECTED
-  ------------------------------------------------------------ */
+useEffect(() => {
+  if (!selectedGroup || selectedDevices.length === 0) {
+    setRealtimeTimeout(false);
+    return;
+  }
+  setRealtimeTimeout(false);
+  const timer = setTimeout(() => {
+    setRealtimeTimeout(true);
+  }, 10000); // 10 seconds
+
+  return () => clearTimeout(timer);
+}, [selectedGroup, selectedDevices]);
+
   useEffect(() => {
     if (!selectedGroup) return;
 
@@ -188,11 +174,24 @@ const activeDeviceIds = useMemo(
     );
   }
 
-if (loading || isRealtimeLoading) {
+// if (loading || isRealtimeLoading) {
+//   return <Loading fullScreen text="Loading realtime dashboard..." />;
+// }
+if (loading) {
   return <Loading fullScreen text="Loading realtime dashboard..." />;
 }
 
+if (isRealtimeLoading && !realtimeTimeout) {
+  return <Loading fullScreen text="Loading realtime dashboard..." />;
+}
 
+if (realtimeTimeout && Object.keys(filteredDevices).length === 0) {
+  return (
+    <div className="h-screen flex items-center justify-center text-gray-500 text-xl">
+      No Data Available
+    </div>
+  );
+}
   return (
     <div className="p-6 space-y-4 bg-gray-50 dark:bg-gray-900">
 

@@ -64,33 +64,34 @@ export default function RealtimeMapAll({
     );
   }
 
-  return (
-    <MapContainer
-      center={[20, 78]}
-      zoom={5}
-      style={{ height: "100%", width: "100%" }}
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+return (
+  <MapContainer
+    center={[20, 78]}
+    zoom={5}
+    className="z-0"   // ← added
+    style={{ height: "100%", width: "100%", zIndex: 0 }} // ← added
+  >
+    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-      {/* AUTO DEVICE MOVEMENT */}
-      <FlyToActive devices={devices} activeId={activeId} />
+    {/* AUTO DEVICE MOVEMENT */}
+    <FlyToActive devices={devices} activeId={activeId} />
 
-      {deviceList.map((d: any) => {
-        if (!d?.lat || !d?.lon) return null;
+    {deviceList.map((d: any) => {
+      if (!d?.lat || !d?.lon) return null;
 
-        return (
-          <Marker
-            key={d.id}
-            position={[d.lat, d.lon]}
-            icon={d.id === activeId ? activeIcon : normalIcon}
-            eventHandlers={{
-              click: () => onMarkerClick?.(d.id),
-            }}
-          >
-            <Popup>{d.id}</Popup>
-          </Marker>
-        );
-      })}
-    </MapContainer>
-  );
+      return (
+        <Marker
+          key={d.id}
+          position={[d.lat, d.lon]}
+          icon={d.id === activeId ? activeIcon : normalIcon}
+          eventHandlers={{
+            click: () => onMarkerClick?.(d.id),
+          }}
+        >
+          <Popup>{d.id}</Popup>
+        </Marker>
+      );
+    })}
+  </MapContainer>
+);
 }
