@@ -104,10 +104,11 @@ class Production extends ApiService {
     localStorage.setItem("token", res.data.access_token);
     return res;
   }
+async isLoggedIn() {
+  const token = localStorage.getItem("token");
+  return isTokenAlive(token);
+}
 
-  async isLoggedIn() {
-    return !!localStorage.getItem("token");
-  }
 
   async get(endpoint: string, payload?: any) {
     const url = this.#buildUrl(endpoint);

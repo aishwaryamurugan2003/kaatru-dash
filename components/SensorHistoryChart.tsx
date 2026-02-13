@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { apiService } from "../services/api";
 import { parseSensorHistory } from "../utils/parseSensorHistory";
+import Loading from "../components/Loading";
 
 const FILTERS = [
   { label: "5M", value: "5M" },
@@ -26,6 +27,7 @@ export default function SensorHistoryChart({
 }) {
   const [filter, setFilter] = useState("15M");
   const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [enabled, setEnabled] = useState({
     pm25: true,
     pm10: true,
@@ -36,24 +38,29 @@ export default function SensorHistoryChart({
   useEffect(() => {
     if (!deviceId) return;
 
+    setLoading(true);
+
     apiService
       .fetchSensorHistory(deviceId, filter)
       .then((res) => {
         const parsed = parseSensorHistory(res);
-
         const merged = parsed.pm25.map((_, i) => ({
-          time: parsed.pm25[i]?.time,
-          pm25: parsed.pm25[i]?.value,
-          pm10: parsed.pm10[i]?.value,
-          temp: parsed.temp[i]?.value,
-          humidity: parsed.humidity[i]?.value,
-        }));
+  time: parsed.pm25[i]?.time,
+  pm25: parsed.pm25[i]?.value,
+  pm10: parsed.pm10[i]?.value,
+  temp: parsed.temp[i]?.value,
+  humidity: parsed.humidity[i]?.value,
+}));
+
 
         setData(merged);
       })
       .catch((err) => {
         console.error("Failed to fetch sensor history", err);
         setData([]);
+      })
+      .finally(() => {
+        setLoading(false);
       });
   }, [deviceId, filter]);
 
@@ -97,28 +104,60 @@ export default function SensorHistoryChart({
         ))}
       </div>
 
-      {/* CHART */}
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <XAxis dataKey="time" hide />
-          <YAxis />
-          <Tooltip />
-          <Legend />
+      {/* CHART AREA */}
+      <div className="flex-1 flex items-center justify-center">
+        {loading ? (
+          <Loading text="Loading chart..." />
+        ) : data.length === 0 ? (
+          <div className="text-gray-500">No data available</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data}>
+              <XAxis
+  dataKey="time"
+  tickFormatter={(value) => {
+    if (!value) return "";
 
-          {enabled.pm25 && (
-            <Line dataKey="pm25" stroke="#2563eb" dot={false} />
-          )}
-          {enabled.pm10 && (
-            <Line dataKey="pm10" stroke="#16a34a" dot={false} />
-          )}
-          {enabled.temp && (
-            <Line dataKey="temp" stroke="#f97316" dot={false} />
-          )}
-          {enabled.humidity && (
-            <Line dataKey="humidity" stroke="#06b6d4" dot={false} />
-          )}
-        </LineChart>
-      </ResponsiveContainer>
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+
+    return d.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }}
+/>
+
+              <YAxis />
+              <Tooltip
+  labelFormatter={(value) => {
+    if (!value) return "";
+
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+
+    return d.toLocaleString();
+  }}
+/>
+
+              <Legend />
+
+              {enabled.pm25 && (
+                <Line dataKey="pm25" stroke="#2563eb" dot={false} />
+              )}
+              {enabled.pm10 && (
+                <Line dataKey="pm10" stroke="#16a34a" dot={false} />
+              )}
+              {enabled.temp && (
+                <Line dataKey="temp" stroke="#f97316" dot={false} />
+              )}
+              {enabled.humidity && (
+                <Line dataKey="humidity" stroke="#06b6d4" dot={false} />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
     </div>
   );
 }

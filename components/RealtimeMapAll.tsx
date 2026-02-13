@@ -32,13 +32,26 @@ function FlyToActive({
     const device = devices[activeId];
     if (!device?.lat || !device?.lon) return;
 
-    map.flyTo([device.lat, device.lon], 15, {
-      duration: 2,
+    const currentCenter = map.getCenter();
+    const target = L.latLng(device.lat, device.lon);
+
+    // Prevent tiny or repeated movements
+    if (currentCenter.distanceTo(target) < 50) return;
+
+    // Stop any ongoing animation
+    map.stop();
+
+    // Smooth but quick movement
+    map.flyTo(target, 14, {
+      duration: 1.2,
+      easeLinearity: 0.25,
     });
-  }, [activeId, devices, map]);
+  }, [activeId, map]);
+
 
   return null;
 }
+
 
 /* ---------------------------------------------
    MAIN MAP COMPONENT

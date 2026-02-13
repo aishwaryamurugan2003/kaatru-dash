@@ -6,11 +6,12 @@ import Header from "./components/Header";
 import DataAnalysisPage from "./pages/DataAnalysisPage";
 import LoginPage from "./pages/LoginPage";
 import DeviceAdministrationPage from "./pages/DeviceAdministrationPage";
-import DataVisualizationPage from "./pages/DataVisualizationPage"; 
+import DataVisualizationPage from "./pages/DataVisualizationPage";
 import RealtimeDashboardPage from "./pages/RealtimeDashboardPage";
 
 import { isTokenAlive } from "./utils/token";
 import { apiService } from "./services/api";
+import ProtectedRoute from "./routes/ProtectedRoute";
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -51,43 +52,50 @@ function App() {
         {/* ---------- LOGIN PAGE ---------- */}
         <Route path="/" element={<LoginPage />} />
 
-        {/* ---------- DATA ANALYSIS DASHBOARD ---------- */}
+        {/* ---------- PROTECTED DASHBOARD ROUTES ---------- */}
         <Route
           path="/dashboard"
           element={
-            <DashboardLayout>
-              <DataAnalysisPage />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DataAnalysisPage />
+              </DashboardLayout>
+            </ProtectedRoute>
           }
         />
 
-        {/* ---------- DEVICE ADMIN ---------- */}
         <Route
           path="/device-admin"
           element={
-            <DashboardLayout>
-              <DeviceAdministrationPage />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DeviceAdministrationPage />
+              </DashboardLayout>
+            </ProtectedRoute>
           }
         />
 
-        {/* ---------- 🔥 LIVE DATA VISUALIZATION MAP DASHBOARD ---------- */}
         <Route
           path="/data-visualization"
           element={
-            <DashboardLayout>
-              <DataVisualizationPage />
-            </DashboardLayout>
+            <ProtectedRoute>
+              <DashboardLayout>
+                <DataVisualizationPage />
+              </DashboardLayout>
+            </ProtectedRoute>
           }
         />
-<Route
-  path="/realtime-dashboard"
-  element={
-    <DashboardLayout>
-      <RealtimeDashboardPage />
-    </DashboardLayout>
-  }
-/>
+
+        <Route
+          path="/realtime-dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <RealtimeDashboardPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
